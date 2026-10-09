@@ -4,7 +4,7 @@ window.QUEST_LEVELS[10] = {
   id: 10,
   title: "Pseudocode Practice",
   icon: "📝",
-  description: "30 placement-round practice questions on tracing and reasoning about algorithms.",
+  description: "Pseudocode challenges on tracing and reasoning about algorithms.",
   topics: ["Pseudocode conventions", "Variables and assignment", "Conditions", "Loops", "Arrays"],
   questions: [
     {

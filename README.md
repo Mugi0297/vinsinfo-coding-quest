@@ -58,10 +58,10 @@ window.QUEST_LEVELS[1] = {
 };
 ```
 
-`answer` is the zero-based index of the correct option: 0 means A, 1 means B, 2 means C, and 3 means D.
+`answer` is the zero-based index of the correct option: 0 means A, 1 means B, 2 means C, and 3 means D. Each level has a question bank; a game randomly selects up to 30 questions from that bank for each run.
 
 ## Current limitations
 
 - XP, streak, unlocked levels, and completed levels are saved in this browser using local storage. Progress is specific to the browser and device.
 - This is a front-end prototype. Authentication, a database, teacher/admin tools, and an online leaderboard can be added later with Spring Boot and PostgreSQL.
-- The question bank contains 300 practice questions across 10 levels, with 30 pseudocode questions in Level 10. These are placement-round practice questions, not a verified or official list of VINSINFO questions.
+- The question bank contains 350 practice questions across 10 levels. Each level randomly presents 30 questions per game from its 35-question bank. These are placement-round practice questions, not a verified or official list of VINSINFO questions.

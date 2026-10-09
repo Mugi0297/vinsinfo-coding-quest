@@ -1,5 +1,6 @@
 const levels = Object.values(window.QUEST_LEVELS || {}).sort((a, b) => a.id - b.id);
 const PLAYER_STORAGE_KEY = "vinsinfo-coding-quest-player-v1";
+const QUESTIONS_PER_GAME = 30;
 
 const player = {
   xp: 0,
@@ -7,6 +8,8 @@ const player = {
   unlockedLevel: 1,
   completedLevels: new Set()
 };
+
+const QUESTION_TIME_LIMIT = 60;
 
 let currentLevel = null;
 let currentQuestions = [];
@@ -16,7 +19,7 @@ let lives = 3;
 let correctAnswers = 0;
 let levelStreak = 0;
 let timerId = null;
-let timeLeft = 20;
+let timeLeft = QUESTION_TIME_LIMIT;
 let answered = false;
 let hintUsed = false;
 let earnedXP = 0;
@@ -128,7 +131,7 @@ function renderLevels() {
     const levelNumber = document.createElement("span");
     levelNumber.textContent = `Level ${String(level.id).padStart(2, "0")}`;
     const questionCount = document.createElement("span");
-    questionCount.textContent = `${level.questions.length} questions`;
+    questionCount.textContent = `${level.questions.length}-question bank`;
     meta.append(levelNumber, questionCount);
 
     const button = document.createElement("button");
@@ -166,7 +169,8 @@ function showLevel(levelId) {
   });
 
   const info = document.createElement("p");
-  info.textContent = `${currentLevel.questions.length} questions | 20 seconds per question | 3 lives`;
+  const gameQuestionCount = Math.min(QUESTIONS_PER_GAME, currentLevel.questions.length);
+  info.textContent = `${gameQuestionCount} questions per game, randomly selected from ${currentLevel.questions.length} | ${QUESTION_TIME_LIMIT} seconds per question | 3 lives`;
   $("detailsContent").append(title, description, topicTitle, topicList, info);
   $("startButton").textContent = "Start Level 🚀";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -190,7 +194,7 @@ function shuffle(array) {
 function startLevel() {
   if (!currentLevel) return;
   clearInterval(timerId);
-  currentQuestions = shuffle(currentLevel.questions);
+  currentQuestions = shuffle(currentLevel.questions).slice(0, QUESTIONS_PER_GAME);
   questionIndex = 0;
   score = 0;
   lives = 3;
@@ -206,6 +210,387 @@ function startLevel() {
   renderQuestion();
 }
 
+function findMatchingCodeDelimiter(source, openingIndex, openingCharacter, closingCharacter) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+
+  for (let index = openingIndex; index < source.length; index++) {
+    const character = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === openingCharacter) {
+      depth++;
+    } else if (character === closingCharacter && --depth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findCodeStatementEnd(source, startIndex) {
+  let parentheses = 0;
+  let braces = 0;
+  let quote = "";
+  let escaped = false;
+
+  for (let index = startIndex; index < source.length; index++) {
+    const character = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "(") {
+      parentheses++;
+    } else if (character === ")") {
+      parentheses = Math.max(0, parentheses - 1);
+    } else if (character === "{") {
+      braces++;
+    } else if (character === "}") {
+      braces = Math.max(0, braces - 1);
+    } else if (character === ";" && parentheses === 0 && braces === 0) {
+      return index + 1;
+    }
+  }
+  return -1;
+}
+
+function extractCodeSnippet(text) {
+  if (/\bfor each\b/i.test(text)) return null;
+  const codeStartPattern = /\b(?:for|while|if|switch)\s*\(|\b(?:int|char|float|double|long|short|boolean|String|void)\s+[A-Za-z_]\w*\s*(?:=|;|\[\d+\])|\b(?:printf|System\.out\.(?:print|println)|print)\s*\(|\b(?:SET|FOR)\s+[A-Za-z_]\w*\s*=|\b(?:const|let|var)\s+[A-Za-z_]\w*\s*=/gi;
+  const match = codeStartPattern.exec(text);
+  if (!match) return null;
+
+  let prefix = text.slice(0, match.index).trim().replace(/[:\s]+$/, "");
+  let code = text.slice(match.index).trim();
+  let suffix = "";
+  const arrayDeclaration = match[0].match(/^(?:int|char|float|double|long|short|boolean|String)\s+[A-Za-z_]\w*\s*\[\d+\]/i);
+  if (arrayDeclaration) {
+    const trailingText = code.slice(arrayDeclaration[0].length);
+    if (/^\s+(?:in|what|how|which|why|does|is)\b/i.test(trailingText)) {
+      suffix = trailingText.trim().replace(/[?.!]\s*$/, "");
+      code = code.slice(0, arrayDeclaration[0].length);
+    }
+  }
+  const trailingPrompt = code.match(/;\s*,?\s*(?=(?:what|how|which|why|does|will|is the|the value|value of|print(?:[?.!]|$)))/i);
+  if (!suffix && trailingPrompt) {
+    const suffixIndex = trailingPrompt.index + trailingPrompt[0].length;
+    suffix = code.slice(suffixIndex).replace(/[?.!]\s*$/, "").trim();
+    code = code.slice(0, trailingPrompt.index + 1).trim();
+  }
+  const controlHeader = code.match(/^(?:for|if|while|switch)\s*\(/i);
+  if (!suffix && controlHeader) {
+    let parentheses = 0;
+    let headerQuote = "";
+    let headerEscaped = false;
+    let headerEnd = -1;
+    for (let index = controlHeader[0].length - 1; index < code.length; index++) {
+      const character = code[index];
+      if (headerQuote) {
+        if (headerEscaped) headerEscaped = false;
+        else if (character === "\\") headerEscaped = true;
+        else if (character === headerQuote) headerQuote = "";
+      } else if (character === "\"" || character === "'") {
+        headerQuote = character;
+      } else if (character === "(") {
+        parentheses++;
+      } else if (character === ")") {
+        parentheses--;
+        if (parentheses === 0) {
+          headerEnd = index + 1;
+          break;
+        }
+      }
+    }
+
+    if (headerEnd >= 0) {
+      const trailingText = code.slice(headerEnd).trim();
+      if (/^(?:[.,;]\s*)?(?:what|how|which|why|does|do\b|will|is|are|was|were|when|run\b)/i.test(trailingText)) {
+        suffix = trailingText.replace(/^[.,;]\s*/, "").replace(/[?.!]\s*$/, "").trim();
+        code = code.slice(0, headerEnd).trim();
+      }
+    }
+  }
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  let closingBrace = -1;
+
+  for (let index = 0; index < code.length; index++) {
+    const character = code[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "{") {
+      depth++;
+    } else if (character === "}") {
+      depth--;
+      if (depth === 0) {
+        closingBrace = index + 1;
+        const trailingElse = code.slice(closingBrace).match(/^\s*else\b/);
+        if (trailingElse) {
+          while (true) {
+            const elseStart = closingBrace + code.slice(closingBrace).search(/\S/) + 4;
+            let bodyStart = elseStart;
+            while (/\s/.test(code[bodyStart] || "")) bodyStart++;
+            if (/^if\b/i.test(code.slice(bodyStart))) {
+              const openingParenthesis = code.indexOf("(", bodyStart);
+              const closingParenthesis = findMatchingCodeDelimiter(code, openingParenthesis, "(", ")");
+              if (openingParenthesis < 0 || closingParenthesis < 0) break;
+              bodyStart = closingParenthesis + 1;
+              while (/\s/.test(code[bodyStart] || "")) bodyStart++;
+            }
+
+            if (code[bodyStart] === "{") {
+              const blockEnd = findMatchingCodeDelimiter(code, bodyStart, "{", "}");
+              if (blockEnd < 0) break;
+              closingBrace = blockEnd + 1;
+            } else {
+              const statementEnd = findCodeStatementEnd(code, bodyStart);
+              if (statementEnd < 0) break;
+              closingBrace = statementEnd;
+            }
+
+            if (!/^\s*else\b/.test(code.slice(closingBrace))) break;
+          }
+          break;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  if (closingBrace >= 0) {
+    let end = closingBrace;
+    if (code[end] === ";") end++;
+    suffix = [suffix, code.slice(end).trim()].filter(Boolean).join(" ");
+    code = code.slice(0, end).trim();
+  } else {
+    code = code.replace(/[?]\s*$/, "").trim();
+  }
+
+  if (/,\s*if$/i.test(prefix) && /^is written\b/i.test(suffix)) {
+    prefix = prefix.replace(/,\s*if$/i, ", this condition");
+  } else if (/,\s*$/i.test(prefix) && /^is written\b/i.test(suffix)) {
+    prefix = `${prefix} this condition`;
+  }
+  if (/what does$/i.test(prefix) && /^do$/i.test(suffix)) {
+    prefix = `${prefix} this condition`;
+    suffix = "do";
+  }
+  if (/\bin$/i.test(prefix) && /^in\b/i.test(suffix)) {
+    suffix = suffix.replace(/^in\b\s*/i, "");
+  }
+  let prompt = [prefix, suffix].filter(Boolean).join(" ");
+  if (prompt && !/[?.!]$/.test(prompt)) prompt += / by$/i.test(prompt) ? ":" : "?";
+  return { prompt, code };
+}
+
+function formatCodeSnippet(source) {
+  const isPseudocode = /\b(?:SET|FOR|WHILE|IF|END\s+(?:FOR|WHILE|IF))\b/.test(source);
+  if (isPseudocode) {
+    const lines = source
+      .replace(/:\s*(?=(?:SET|PRINT|IF|FOR|WHILE)\b)/gi, "\n")
+      .split(/[;\r\n]+/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    let indentation = 0;
+    return lines.map(line => {
+      const closesBlock = /^END\s+(?:FOR|WHILE|IF)\b/i.test(line);
+      const startsElse = /^ELSE\b/i.test(line);
+      if (closesBlock || startsElse) indentation = Math.max(0, indentation - 1);
+      const formattedLine = `${"  ".repeat(indentation)}${line.replace(/;$/, "")}`;
+      if (/^(?:FOR\b|WHILE\b|IF\b.*THEN|ELSE\b)/i.test(line)) indentation++;
+      return formattedLine;
+    }).join("\n");
+  }
+
+  if (/^(?:int|char|float|double|long|short|boolean|String)\s+\w+\s*\[\d+\]$/i.test(source)) {
+    source += ";";
+  }
+
+  const lines = [];
+  let currentLine = "";
+  let indentation = 0;
+  let parenthesisDepth = 0;
+  let pendingBodyIndent = 0;
+  let quote = "";
+  let escaped = false;
+  const flushLine = () => {
+    const trimmed = currentLine.trim();
+    if (trimmed) lines.push(`${"  ".repeat(indentation)}${trimmed}`);
+    currentLine = "";
+  };
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (quote) {
+      currentLine += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === "\n") {
+      flushLine();
+    } else if (/^else\b/i.test(source.slice(index)) && !currentLine.trim()) {
+      const afterElseIndex = index + 4;
+      const nextCodeIndex = source.slice(afterElseIndex).search(/\S/);
+      const nextSourceIndex = nextCodeIndex < 0 ? -1 : afterElseIndex + nextCodeIndex;
+      const nextCharacter = nextSourceIndex < 0 ? "" : source[nextSourceIndex];
+      currentLine = "else";
+      index += 3;
+      if (nextCharacter === "{") continue;
+      flushLine();
+      if (nextCharacter && !/^if\b/i.test(source.slice(nextSourceIndex))) {
+        indentation++;
+        pendingBodyIndent++;
+      }
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+      currentLine += character;
+    } else if (character === "(") {
+      parenthesisDepth++;
+      currentLine += character;
+    } else if (character === ")") {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      currentLine += character;
+      const nextCodeIndex = source.slice(index + 1).search(/\S/);
+      const nextCharacter = nextCodeIndex < 0 ? "" : source[index + 1 + nextCodeIndex];
+      if (parenthesisDepth === 0
+        && /^(?:for|if|while|switch)\s*\([\s\S]*\)$/i.test(currentLine.trim())
+        && nextCharacter
+        && nextCharacter !== "{"
+        && nextCharacter !== ";") {
+        flushLine();
+        indentation++;
+        pendingBodyIndent++;
+      }
+    } else if (character === "{" && parenthesisDepth === 0) {
+      currentLine = `${currentLine.trimEnd()} {`;
+      flushLine();
+      indentation++;
+    } else if (character === "}" && parenthesisDepth === 0) {
+      flushLine();
+      indentation = Math.max(0, indentation - 1);
+      const afterBraceIndex = index + 1;
+      const elseOffset = source.slice(afterBraceIndex).search(/\S/);
+      const elseIndex = elseOffset < 0 ? -1 : afterBraceIndex + elseOffset;
+      const afterElseIndex = elseIndex + 4;
+      const bodyOffset = source.slice(afterElseIndex).search(/\S/);
+      const nextBodyCharacter = bodyOffset < 0 ? "" : source[afterElseIndex + bodyOffset];
+      if (elseIndex >= 0
+        && /^else\b/i.test(source.slice(elseIndex))
+        && nextBodyCharacter === "{") {
+        currentLine = "} else";
+        index = afterElseIndex - 1;
+        continue;
+      }
+      currentLine = "}";
+      flushLine();
+    } else if (character === ";" && parenthesisDepth === 0) {
+      currentLine += character;
+      flushLine();
+      if (pendingBodyIndent) {
+        indentation = Math.max(0, indentation - pendingBodyIndent);
+        pendingBodyIndent = 0;
+      }
+    } else if (/\s/.test(character)) {
+      if (currentLine && !currentLine.endsWith(" ")) currentLine += " ";
+    } else {
+      currentLine += character;
+    }
+  }
+  flushLine();
+  return lines.join("\n");
+}
+
+function detectCodeLanguage(prompt, code) {
+  if (/\bSET\b|\bEND\s+(?:FOR|IF|WHILE)\b/.test(code)) return "Pseudocode";
+  if (/\bSystem\.out\.|\bpublic\s+static\b/.test(code) || /\bJava\b/i.test(prompt)) return "Java";
+  if (/\bprint\s*\(/.test(code) && !/\bprintf\s*\(/.test(code) || /\bPython\b/i.test(prompt)) return "Python";
+  return "C";
+}
+
+function appendHighlightedCode(line, code) {
+  const tokenPattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:int|char|float|double|long|short|void|boolean|String|const|let|var|if|else|for|while|do|switch|case|default|break|continue|return|class|public|static|new|true|false|null|None|SET|FOR|WHILE|IF|THEN|ELSE|END|PRINT)\b|\b\d+(?:\.\d+)?\b|===?|!==?|<=?|>=?|&&|\|\||[+\-*\/%=!&|?:.,;()[\]{}])/g;
+  let previousIndex = 0;
+  let match;
+
+  while ((match = tokenPattern.exec(code))) {
+    if (match.index > previousIndex) line.append(document.createTextNode(code.slice(previousIndex, match.index)));
+    const token = match[0];
+    const highlighted = document.createElement("span");
+    highlighted.className = /^["']/.test(token)
+      ? "syntax-string"
+      : /^\d/.test(token)
+        ? "syntax-number"
+        : /^[()[\]{}.,;]$/.test(token)
+          ? "syntax-punctuation"
+          : /^[+\-*\/%=!&|?:<>]/.test(token)
+            ? "syntax-operator"
+            : "syntax-keyword";
+    highlighted.textContent = token;
+    line.appendChild(highlighted);
+    previousIndex = tokenPattern.lastIndex;
+  }
+  if (previousIndex < code.length) line.append(document.createTextNode(code.slice(previousIndex)));
+}
+
+function renderQuestionContent(text) {
+  const container = $("questionText");
+  container.replaceChildren();
+  const snippet = extractCodeSnippet(text);
+
+  if (!snippet) {
+    container.classList.add("text-only");
+    const prompt = document.createElement("p");
+    prompt.className = "question-prompt";
+    prompt.textContent = text;
+    container.appendChild(prompt);
+    return;
+  }
+
+  container.classList.remove("text-only");
+  const prompt = document.createElement("p");
+  prompt.className = "question-prompt";
+  prompt.textContent = snippet.prompt;
+
+  const codePanel = document.createElement("div");
+  codePanel.className = "code-panel";
+  const toolbar = document.createElement("div");
+  toolbar.className = "code-toolbar";
+  const windowControls = document.createElement("span");
+  windowControls.className = "code-window-controls";
+  windowControls.setAttribute("aria-hidden", "true");
+  const language = document.createElement("span");
+  language.className = "code-language";
+  language.textContent = detectCodeLanguage(snippet.prompt, snippet.code);
+  toolbar.append(windowControls, language);
+
+  const codeLines = document.createElement("ol");
+  codeLines.className = "code-lines";
+  formatCodeSnippet(snippet.code).split("\n").forEach(codeLine => {
+    const listItem = document.createElement("li");
+    listItem.className = "code-line";
+    appendHighlightedCode(listItem, codeLine || " ");
+    codeLines.appendChild(listItem);
+  });
+
+  codePanel.append(toolbar, codeLines);
+  container.append(prompt, codePanel);
+}
+
 function renderQuestion() {
   clearInterval(timerId);
   if (lives <= 0 || questionIndex >= currentQuestions.length) {
@@ -215,7 +600,7 @@ function renderQuestion() {
 
   answered = false;
   hintUsed = false;
-  timeLeft = 20;
+  timeLeft = QUESTION_TIME_LIMIT;
   const question = currentQuestions[questionIndex];
 
   $("questionCounter").textContent = `Question ${questionIndex + 1} of ${currentQuestions.length}`;
@@ -224,7 +609,7 @@ function renderQuestion() {
   $("questionProgress").parentElement.setAttribute("aria-valuemax", currentQuestions.length);
   $("questionProgress").parentElement.setAttribute("aria-valuenow", questionIndex + 1);
   $("questionCategory").textContent = currentLevel.title.toUpperCase();
-  $("questionText").textContent = question.question;
+  renderQuestionContent(question.question);
   $("options").replaceChildren();
   $("hintText").textContent = "";
   $("hintText").classList.add("hidden");

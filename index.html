@@ -49,7 +49,7 @@
       <div class="game-top">
         <button id="exitButton" class="btn secondary">✕ Exit</button>
         <span id="questionCounter" class="question-counter">Question 1 of 3</span>
-        <span id="timer" class="timer" role="timer" aria-live="off">⏱ 20s</span>
+        <span id="timer" class="timer" role="timer" aria-live="off">⏱ 60s</span>
       </div>
       <div class="progress-track question-progress" role="progressbar" aria-label="Question progress" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1"><div id="questionProgress" class="progress-fill"></div></div>
       <div class="game-stats" aria-label="Current level stats">
@@ -59,7 +59,7 @@
       </div>
       <article class="question-card">
         <p id="questionCategory" class="eyebrow">PROGRAMMING BASICS</p>
-        <h2 id="questionText">Question appears here</h2>
+        <div id="questionText" class="question-text">Question appears here</div>
         <div id="options" class="options" role="group" aria-label="Answer options"></div>
         <div class="question-actions">
           <button id="hintButton" class="btn secondary">💡 Show Hint</button>
@@ -100,6 +100,7 @@
   <script src="js/levels/level8.js"></script>
   <script src="js/levels/level9.js"></script>
   <script src="js/levels/level10.js"></script>
+  <script src="js/levels/extra-questions.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
