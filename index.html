@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VINSINFO Coding Quest</title>
+  <meta name="theme-color" content="#0b1020">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">⚡</span> VINSINFO <span class="brand-light">Coding Quest</span></div>
+    <div class="header-stats" aria-label="Your stats">
+      <span><span aria-hidden="true">⭐</span> XP <strong id="xp">0</strong></span>
+      <span><span aria-hidden="true">🔥</span> Streak <strong id="streak">0</strong></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="dashboard">
+      <section class="welcome">
+        <div class="welcome-copy">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> PLACEMENT PREPARATION GAME</p>
+          <h1>Ready to level up?</h1>
+          <p>Build your coding confidence one challenge at a time. Practice, improve, and get ready for your next opportunity.</p>
+        </div>
+        <div class="welcome-progress">
+          <div class="progress-heading"><span>Your progress</span><span id="progressText">0 of 10 levels completed</span></div>
+          <div class="progress-track" role="progressbar" aria-label="Levels completed" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><div id="progressBar" class="progress-fill"></div></div>
+        </div>
+        <button id="continueLearningButton" class="btn primary continue-button"><span id="continueLearningLabel">Start your first level</span><span aria-hidden="true">→</span></button>
+      </section>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">YOUR LEARNING PATH</p>
+          <h2>Choose your level</h2>
+        </div>
+        <p>Complete a level to unlock the next challenge.</p>
+      </div>
+      <div id="levelGrid" class="level-grid"></div>
+      <section id="levelDetails" class="details hidden">
+        <button id="backButton" class="btn secondary">← Back to levels</button>
+        <div id="detailsContent"></div>
+        <button id="startButton" class="btn primary">Start Level 🚀</button>
+      </section>
+    </section>
+
+    <section id="gameScreen" class="game-screen hidden">
+      <div class="game-top">
+        <button id="exitButton" class="btn secondary">✕ Exit</button>
+        <span id="questionCounter" class="question-counter">Question 1 of 3</span>
+        <span id="timer" class="timer" role="timer" aria-live="off">⏱ 20s</span>
+      </div>
+      <div class="progress-track question-progress" role="progressbar" aria-label="Question progress" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1"><div id="questionProgress" class="progress-fill"></div></div>
+      <div class="game-stats" aria-label="Current level stats">
+        <span><span aria-hidden="true">⭐</span> Score <strong id="score">0</strong></span>
+        <span><span aria-hidden="true">❤️</span> Lives <strong id="lives" aria-label="3 lives remaining">❤️❤️❤️</strong></span>
+        <span><span aria-hidden="true">🔥</span> Streak <strong id="gameStreak">0</strong></span>
+      </div>
+      <article class="question-card">
+        <p id="questionCategory" class="eyebrow">PROGRAMMING BASICS</p>
+        <h2 id="questionText">Question appears here</h2>
+        <div id="options" class="options" role="group" aria-label="Answer options"></div>
+        <div class="question-actions">
+          <button id="hintButton" class="btn secondary">💡 Show Hint</button>
+          <button id="nextButton" class="btn primary" disabled>Next Question →</button>
+        </div>
+        <p id="hintText" class="hint-text hidden"></p>
+        <div id="feedback" class="feedback hidden" aria-live="polite" aria-atomic="true"></div>
+      </article>
+    </section>
+
+    <section id="resultScreen" class="result-screen hidden">
+      <div class="result-icon" id="resultIcon" aria-hidden="true">🏆</div>
+      <p class="eyebrow">LEVEL REPORT</p>
+      <h1 id="resultTitle">Level Completed!</h1>
+      <p id="resultMessage"></p>
+      <div class="result-stats">
+        <div><span>Score</span><strong id="finalScore">0</strong></div>
+        <div><span>Correct</span><strong id="finalCorrect">0/3</strong></div>
+        <div><span>XP Earned</span><strong id="finalXP">0</strong></div>
+      </div>
+      <div class="result-actions">
+        <button id="retryButton" class="btn secondary">↻ Retry Level</button>
+        <button id="continueButton" class="btn primary">Back to Levels →</button>
+      </div>
+    </section>
+  </main>
+
+  <footer><p>VINSINFO Coding Quest | Practice. Improve. Succeed.</p></footer>
+
+  <!-- Load question data first, then the game engine. Keep this order. -->
+  <script src="js/levels/level1.js"></script>
+  <script src="js/levels/level2.js"></script>
+  <script src="js/levels/level3.js"></script>
+  <script src="js/levels/level4.js"></script>
+  <script src="js/levels/level5.js"></script>
+  <script src="js/levels/level6.js"></script>
+  <script src="js/levels/level7.js"></script>
+  <script src="js/levels/level8.js"></script>
+  <script src="js/levels/level9.js"></script>
+  <script src="js/levels/level10.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
