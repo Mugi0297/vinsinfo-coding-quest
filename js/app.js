@@ -4,6 +4,7 @@ const LEADERBOARD_STORAGE_KEY = "vinsinfo-coding-quest-leaderboard-v1";
 const QUESTIONS_PER_GAME = 30;
 
 const player = {
+  name: "Player",
   xp: 0,
   streak: 0,
   bestScore: 0,
@@ -122,6 +123,8 @@ function loadPlayerProgress() {
     ? Math.max(1, Math.min(savedProgress.unlockedLevel, levels.length))
     : 1;
 
+  const savedName = typeof savedProgress.name === "string" ? savedProgress.name.trim() : "";
+  player.name = savedName || "Player";
   player.xp = Number.isFinite(savedProgress.xp) && savedProgress.xp >= 0 ? savedProgress.xp : 0;
   player.streak = Number.isInteger(savedProgress.streak) && savedProgress.streak >= 0 ? savedProgress.streak : 0;
   player.bestScore = Number.isFinite(savedProgress.bestScore) && savedProgress.bestScore >= 0 ? savedProgress.bestScore : 0;
@@ -144,6 +147,7 @@ function loadPlayerProgress() {
 function savePlayerProgress() {
   try {
     localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
+      name: player.name,
       xp: player.xp,
       streak: player.streak,
       bestScore: player.bestScore,
@@ -175,6 +179,11 @@ function saveLeaderboardEntries(entries) {
   }
 }
 
+function getDisplayName(name) {
+  const safeName = typeof name === "string" ? name.trim() : "";
+  return safeName || "Player";
+}
+
 function renderLeaderboard() {
   const list = $("leaderboardList");
   if (!list) return;
@@ -193,15 +202,19 @@ function renderLeaderboard() {
   entries.forEach((entry, index) => {
     const item = document.createElement("li");
     item.className = "leaderboard-item";
+
     const rank = document.createElement("span");
     rank.className = "leaderboard-rank";
-    rank.textContent = `#${index + 1}`;
+    rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
+
     const summary = document.createElement("span");
     summary.className = "leaderboard-summary";
-    summary.textContent = `${entry.score} pts · Level ${entry.level || 1}`;
+    summary.textContent = `${getDisplayName(entry.name)} · ${entry.score} pts · Level ${entry.level || 1}`;
+
     const when = document.createElement("span");
     when.className = "leaderboard-time";
     when.textContent = entry.date ? new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent";
+
     item.append(rank, summary, when);
     list.appendChild(item);
   });
@@ -213,6 +226,14 @@ function toggleLeaderboard() {
   const isHidden = panel.classList.toggle("hidden");
   $("leaderboardButton").textContent = isHidden ? "View Leaderboard" : "Hide Leaderboard";
   if (!isHidden) renderLeaderboard();
+}
+
+function syncPlayerNameFromInput() {
+  const input = $("playerNameInput");
+  if (!input) return;
+  player.name = getDisplayName(input.value);
+  input.value = player.name;
+  savePlayerProgress();
 }
 
 function showScreen(screenId) {
@@ -948,7 +969,12 @@ function finishLevel() {
   player.xp += earnedXP;
   savePlayerProgress();
   const leaderboardEntries = getLeaderboardEntries();
-  leaderboardEntries.push({ score, level: currentLevel.id, date: new Date().toISOString() });
+  leaderboardEntries.push({
+    name: getDisplayName(player.name),
+    score,
+    level: currentLevel.id,
+    date: new Date().toISOString()
+  });
   saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
   nextLevelId = passed && currentLevel.id < levels.length ? currentLevel.id + 1 : null;
 
@@ -1018,7 +1044,16 @@ $("retryButton").addEventListener("click", startLevel);
 $("continueButton").addEventListener("click", continueFromResult);
 $("leaderboardButton").addEventListener("click", toggleLeaderboard);
 $("resetProgressButton").addEventListener("click", resetPlayerProgress);
+$("playerNameInput").addEventListener("input", event => {
+  player.name = getDisplayName(event.target.value);
+  event.target.value = player.name;
+  savePlayerProgress();
+});
 
 loadPlayerProgress();
+const playerNameInput = $("playerNameInput");
+if (playerNameInput) {
+  playerNameInput.value = player.name;
+}
 renderLeaderboard();
 renderLevels();
