@@ -13,3 +13,61 @@ alter table public.leaderboard enable row level security;
 
 grant select, insert on public.leaderboard to service_role;
 grant usage, select on sequence public.leaderboard_id_seq to service_role;
+
+create table if not exists public.leaderboard_submission_limits (
+  client_hash text primary key,
+  window_started_at timestamptz not null,
+  request_count integer not null check (request_count > 0)
+);
+
+alter table public.leaderboard_submission_limits enable row level security;
+
+create index if not exists leaderboard_submission_limits_window_idx
+  on public.leaderboard_submission_limits (window_started_at);
+
+create or replace function public.consume_leaderboard_submission(
+  p_client_hash text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public, pg_temp
+as $$
+declare
+  current_window timestamptz;
+  current_count integer;
+begin
+  if p_client_hash is null or pg_catalog.length(p_client_hash) <> 64
+    or p_limit < 1 or p_window_seconds < 1 then
+    raise exception 'Invalid rate-limit parameters.';
+  end if;
+
+  current_window := pg_catalog.date_bin(
+    pg_catalog.make_interval(secs => p_window_seconds),
+    pg_catalog.now(),
+    timestamptz '2000-01-01 00:00:00+00'
+  );
+
+  delete from public.leaderboard_submission_limits
+    where window_started_at < current_window - interval '1 day';
+
+  insert into public.leaderboard_submission_limits as limits
+    (client_hash, window_started_at, request_count)
+  values (p_client_hash, current_window, 1)
+  on conflict (client_hash) do update
+    set window_started_at = excluded.window_started_at,
+        request_count = case
+          when limits.window_started_at = excluded.window_started_at
+            then limits.request_count + 1
+          else 1
+        end
+  returning request_count into current_count;
+
+  return current_count <= p_limit;
+end;
+$$;
+
+revoke all on function public.consume_leaderboard_submission(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_leaderboard_submission(text, integer, integer) to service_role;

@@ -202,6 +202,24 @@ p { line-height: 1.65; }
   color: var(--muted);
   font-size: 12px;
 }
+.leaderboard-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.leaderboard-filter select {
+  min-height: 38px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
 .leaderboard-item, .leaderboard-empty {
   display: grid;
   grid-template-columns: auto 1fr auto;

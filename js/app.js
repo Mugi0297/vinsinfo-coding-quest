@@ -220,20 +220,28 @@ function getDisplayName(name) {
 }
 
 function renderLeaderboard() {
-  const entries = [...getLeaderboardEntries()].sort((a, b) => b.score - a.score).slice(0, 5);
+  const selectedLevel = $("leaderboardLevelFilter").value;
+  const filteredEntries = getLeaderboardEntries().filter(entry =>
+    selectedLevel === "all" || Number(entry.level) === Number(selectedLevel)
+  );
+  const entries = [...filteredEntries].sort((a, b) => b.score - a.score).slice(0, 10);
   renderLeaderboardEntries(entries);
 }
 
 async function loadGlobalLeaderboard() {
   const status = $("leaderboardStatus");
+  const selectedLevel = $("leaderboardLevelFilter").value;
   status.textContent = "Loading shared scores…";
   try {
-    const response = await fetch("/api/leaderboard");
+    const query = new URLSearchParams({ level: selectedLevel });
+    const response = await fetch(`/api/leaderboard?${query}`);
     if (!response.ok) throw new Error(`Leaderboard request failed (${response.status}).`);
     const data = await response.json();
     if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
     renderLeaderboardEntries(data.entries);
-    status.textContent = "Scores shared across all players.";
+    status.textContent = selectedLevel === "all"
+      ? "Scores shared across all players and levels."
+      : `Scores shared across all players for Level ${selectedLevel}.`;
   } catch (error) {
     console.error("Unable to load the global leaderboard.", error);
     renderLeaderboard();
@@ -255,11 +263,12 @@ async function submitGlobalLeaderboardRun(entry) {
     }
     const data = await response.json();
     if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
+    $("leaderboardLevelFilter").value = String(entry.level);
     renderLeaderboardEntries(data.entries);
-    status.textContent = "Your score was added to the global leaderboard.";
+    status.textContent = `Your score was added to the Level ${entry.level} leaderboard.`;
   } catch (error) {
     console.error("Unable to submit the score to the global leaderboard.", error);
-    status.textContent = "Your score could not be shared. It is saved only in this browser.";
+    status.textContent = `${error.message} The run remains saved only in this browser.`;
   }
 }
 
@@ -1088,6 +1097,7 @@ $("exitButton").addEventListener("click", returnToDashboard);
 $("retryButton").addEventListener("click", startLevel);
 $("continueButton").addEventListener("click", continueFromResult);
 $("leaderboardButton").addEventListener("click", toggleLeaderboard);
+$("leaderboardLevelFilter").addEventListener("change", loadGlobalLeaderboard);
 $("resetProgressButton").addEventListener("click", resetPlayerProgress);
 $("playerNameInput").addEventListener("change", event => {
   player.name = getDisplayName(event.target.value);
