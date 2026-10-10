@@ -1,23 +1,29 @@
 const levels = Object.values(window.QUEST_LEVELS || {}).sort((a, b) => a.id - b.id);
 const PLAYER_STORAGE_KEY = "vinsinfo-coding-quest-player-v1";
+const LEADERBOARD_STORAGE_KEY = "vinsinfo-coding-quest-leaderboard-v1";
 const QUESTIONS_PER_GAME = 30;
 
 const player = {
   xp: 0,
   streak: 0,
+  bestScore: 0,
+  bestStreak: 0,
   unlockedLevel: 1,
-  completedLevels: new Set()
+  completedLevels: new Set(),
+  bestLevelScores: {}
 };
 
 const QUESTION_TIME_LIMIT = 60;
+const MAX_LIVES = 5;
 
 let currentLevel = null;
 let currentQuestions = [];
 let questionIndex = 0;
 let score = 0;
-let lives = 3;
+let lives = MAX_LIVES;
 let correctAnswers = 0;
 let levelStreak = 0;
+let bestLevelStreak = 0;
 let timerId = null;
 let timeLeft = QUESTION_TIME_LIMIT;
 let answered = false;
@@ -26,6 +32,71 @@ let earnedXP = 0;
 let nextLevelId = null;
 
 const $ = id => document.getElementById(id);
+
+function announceStatus(message) {
+  const liveRegion = $("liveRegion");
+  if (!liveRegion) return;
+  liveRegion.textContent = "";
+  window.setTimeout(() => {
+    liveRegion.textContent = message;
+  }, 20);
+}
+
+let audioContext = null;
+
+function ensureAudioContext() {
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return null;
+  if (!audioContext) audioContext = new AudioCtor();
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playTone({ frequency, duration = 0.16, volume = 0.04, type = "sine", delay = 0, sweep = 0 }) {
+  const context = ensureAudioContext();
+  if (!context) return;
+
+  const oscillator = context.createOscillator();
+  const gainNode = context.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, context.currentTime + delay);
+  if (sweep) {
+    oscillator.frequency.exponentialRampToValueAtTime(
+      Math.max(40, frequency + sweep),
+      context.currentTime + delay + duration
+    );
+  }
+
+  gainNode.gain.setValueAtTime(0.0001, context.currentTime + delay);
+  gainNode.gain.exponentialRampToValueAtTime(volume, context.currentTime + delay + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + delay + duration);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(context.destination);
+
+  oscillator.start(context.currentTime + delay);
+  oscillator.stop(context.currentTime + delay + duration);
+}
+
+function playAnswerSound(isCorrect) {
+  if (isCorrect) {
+    playTone({ frequency: 660, duration: 0.12, volume: 0.05, type: "triangle", sweep: 120 });
+    setTimeout(() => playTone({ frequency: 880, duration: 0.14, volume: 0.05, type: "triangle", sweep: 150 }), 90);
+  } else {
+    playTone({ frequency: 220, duration: 0.18, volume: 0.045, type: "sawtooth", sweep: -90 });
+  }
+}
+
+function triggerCardAnimation(type) {
+  const card = document.querySelector(".question-card");
+  if (!card) return;
+  card.classList.remove("answer-correct", "answer-incorrect");
+  void card.offsetWidth;
+  card.classList.add(type === "correct" ? "answer-correct" : "answer-incorrect");
+  setTimeout(() => card.classList.remove(type === "correct" ? "answer-correct" : "answer-incorrect"), 330);
+}
 
 function loadPlayerProgress() {
   let savedProgress;
@@ -53,8 +124,21 @@ function loadPlayerProgress() {
 
   player.xp = Number.isFinite(savedProgress.xp) && savedProgress.xp >= 0 ? savedProgress.xp : 0;
   player.streak = Number.isInteger(savedProgress.streak) && savedProgress.streak >= 0 ? savedProgress.streak : 0;
+  player.bestScore = Number.isFinite(savedProgress.bestScore) && savedProgress.bestScore >= 0 ? savedProgress.bestScore : 0;
+  player.bestStreak = Number.isInteger(savedProgress.bestStreak) && savedProgress.bestStreak >= 0 ? savedProgress.bestStreak : 0;
   player.unlockedLevel = Math.max(savedUnlockedLevel, Math.min(highestCompletedLevel + 1, levels.length));
   player.completedLevels = new Set(completedLevelIds);
+
+  const rawBestLevelScores = savedProgress.bestLevelScores && typeof savedProgress.bestLevelScores === "object"
+    ? savedProgress.bestLevelScores
+    : {};
+  player.bestLevelScores = {};
+  Object.entries(rawBestLevelScores).forEach(([levelId, score]) => {
+    const levelNumber = Number(levelId);
+    if (Number.isInteger(levelNumber) && levelNumber >= 1 && Number.isFinite(score) && score >= 0) {
+      player.bestLevelScores[levelNumber] = Math.max(score, player.bestLevelScores[levelNumber] || 0);
+    }
+  });
 }
 
 function savePlayerProgress() {
@@ -62,12 +146,73 @@ function savePlayerProgress() {
     localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
       xp: player.xp,
       streak: player.streak,
+      bestScore: player.bestScore,
+      bestStreak: player.bestStreak,
       unlockedLevel: player.unlockedLevel,
-      completedLevels: [...player.completedLevels]
+      completedLevels: [...player.completedLevels],
+      bestLevelScores: player.bestLevelScores
     }));
   } catch (error) {
     console.error("Unable to save Coding Quest progress.", error);
   }
+}
+
+function getLeaderboardEntries() {
+  try {
+    const entries = JSON.parse(localStorage.getItem(LEADERBOARD_STORAGE_KEY) || "[]");
+    return Array.isArray(entries) ? entries.filter(entry => entry && typeof entry.score === "number" && Number.isFinite(entry.score)) : [];
+  } catch (error) {
+    console.error("Unable to read leaderboard data.", error);
+    return [];
+  }
+}
+
+function saveLeaderboardEntries(entries) {
+  try {
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(entries));
+  } catch (error) {
+    console.error("Unable to save leaderboard data.", error);
+  }
+}
+
+function renderLeaderboard() {
+  const list = $("leaderboardList");
+  if (!list) return;
+
+  const entries = [...getLeaderboardEntries()].sort((a, b) => b.score - a.score).slice(0, 5);
+  list.replaceChildren();
+
+  if (!entries.length) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "leaderboard-empty";
+    emptyItem.textContent = "No runs logged yet. Finish a level to set a score.";
+    list.appendChild(emptyItem);
+    return;
+  }
+
+  entries.forEach((entry, index) => {
+    const item = document.createElement("li");
+    item.className = "leaderboard-item";
+    const rank = document.createElement("span");
+    rank.className = "leaderboard-rank";
+    rank.textContent = `#${index + 1}`;
+    const summary = document.createElement("span");
+    summary.className = "leaderboard-summary";
+    summary.textContent = `${entry.score} pts · Level ${entry.level || 1}`;
+    const when = document.createElement("span");
+    when.className = "leaderboard-time";
+    when.textContent = entry.date ? new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent";
+    item.append(rank, summary, when);
+    list.appendChild(item);
+  });
+}
+
+function toggleLeaderboard() {
+  const panel = $("leaderboardPanel");
+  if (!panel) return;
+  const isHidden = panel.classList.toggle("hidden");
+  $("leaderboardButton").textContent = isHidden ? "View Leaderboard" : "Hide Leaderboard";
+  if (!isHidden) renderLeaderboard();
 }
 
 function showScreen(screenId) {
@@ -75,9 +220,42 @@ function showScreen(screenId) {
   $(screenId).classList.remove("hidden");
 }
 
+function getTopLevelSummary() {
+  const entries = Object.entries(player.bestLevelScores);
+  if (!entries.length) return { label: "—", score: 0 };
+  const [levelId, score] = entries.reduce((best, current) => current[1] > best[1] ? current : best, entries[0]);
+  return {
+    label: `Level ${levelId}`,
+    score: Number(score)
+  };
+}
+
+function resetPlayerProgress() {
+  if (!window.confirm("Reset your progress and best scores? This cannot be undone.")) return;
+
+  player.xp = 0;
+  player.streak = 0;
+  player.bestScore = 0;
+  player.bestStreak = 0;
+  player.unlockedLevel = 1;
+  player.completedLevels = new Set();
+  player.bestLevelScores = {};
+  savePlayerProgress();
+  renderLevels();
+  renderStats();
+  announceStatus("Progress reset successfully.");
+}
+
 function renderStats() {
   $("xp").textContent = player.xp;
   $("streak").textContent = player.streak;
+  $("bestScore").textContent = player.bestScore;
+  $("bestStreak").textContent = player.bestStreak;
+  const topLevel = getTopLevelSummary();
+  $("panelBestScore").textContent = player.bestScore;
+  $("panelBestStreak").textContent = player.bestStreak;
+  $("panelTopLevel").textContent = topLevel.score ? `${topLevel.label} (${topLevel.score})` : "—";
+
   const completed = player.completedLevels.size;
   const progress = levels.length ? completed / levels.length * 100 : 0;
   $("progressBar").style.width = `${progress}%`;
@@ -132,7 +310,11 @@ function renderLevels() {
     levelNumber.textContent = `Level ${String(level.id).padStart(2, "0")}`;
     const questionCount = document.createElement("span");
     questionCount.textContent = `${level.questions.length}-question bank`;
-    meta.append(levelNumber, questionCount);
+    const bestScore = player.bestLevelScores[level.id] ?? 0;
+    const bestScoreDisplay = document.createElement("span");
+    bestScoreDisplay.className = "level-best-score";
+    bestScoreDisplay.textContent = bestScore ? `Best ${bestScore}` : "No best yet";
+    meta.append(levelNumber, questionCount, bestScoreDisplay);
 
     const button = document.createElement("button");
     button.className = `btn ${unlocked ? "primary" : "secondary"}`;
@@ -170,7 +352,7 @@ function showLevel(levelId) {
 
   const info = document.createElement("p");
   const gameQuestionCount = Math.min(QUESTIONS_PER_GAME, currentLevel.questions.length);
-  info.textContent = `${gameQuestionCount} questions per game, randomly selected from ${currentLevel.questions.length} | ${QUESTION_TIME_LIMIT} seconds per question | 3 lives`;
+  info.textContent = `${gameQuestionCount} questions per game, randomly selected from ${currentLevel.questions.length} | ${QUESTION_TIME_LIMIT} seconds per question | ${MAX_LIVES} lives`;
   $("detailsContent").append(title, description, topicTitle, topicList, info);
   $("startButton").textContent = "Start Level 🚀";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -191,19 +373,25 @@ function shuffle(array) {
   return copy;
 }
 
+function updateLivesDisplay() {
+  const safeLives = Math.max(0, lives);
+  $("lives").textContent = "❤️".repeat(safeLives) + "🖤".repeat(Math.max(0, MAX_LIVES - safeLives));
+  $("lives").setAttribute("aria-label", `${safeLives} ${safeLives === 1 ? "life" : "lives"} remaining`);
+}
+
 function startLevel() {
   if (!currentLevel) return;
   clearInterval(timerId);
   currentQuestions = shuffle(currentLevel.questions).slice(0, QUESTIONS_PER_GAME);
   questionIndex = 0;
   score = 0;
-  lives = 3;
+  lives = MAX_LIVES;
   correctAnswers = 0;
   levelStreak = 0;
+  bestLevelStreak = 0;
   earnedXP = 0;
   $("score").textContent = score;
-  $("lives").textContent = "❤️❤️❤️";
-  $("lives").setAttribute("aria-label", "3 lives remaining");
+  updateLivesDisplay();
   $("gameStreak").textContent = levelStreak;
   $("levelDetails").classList.add("hidden");
   showScreen("gameScreen");
@@ -622,6 +810,8 @@ function renderQuestion() {
   question.options.forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "option-btn";
+    button.type = "button";
+    button.setAttribute("aria-label", `Answer option ${String.fromCharCode(65 + index)}: ${option}`);
     const optionLetter = document.createElement("span");
     optionLetter.className = "option-letter";
     optionLetter.setAttribute("aria-hidden", "true");
@@ -633,6 +823,10 @@ function renderQuestion() {
     button.addEventListener("click", () => chooseAnswer(index));
     $("options").appendChild(button);
   });
+
+  const firstOption = $("options").querySelector("button");
+  if (firstOption) firstOption.focus();
+  announceStatus(`Question ${questionIndex + 1} of ${currentQuestions.length}. ${question.question}`);
 
   updateTimerDisplay();
   timerId = setInterval(() => {
@@ -671,20 +865,27 @@ function chooseAnswer(selectedIndex) {
     earnedXP += points;
     correctAnswers++;
     levelStreak++;
+    bestLevelStreak = Math.max(bestLevelStreak, levelStreak);
     player.streak++;
+    player.bestStreak = Math.max(player.bestStreak, player.streak);
+    playAnswerSound(true);
+    triggerCardAnimation("correct");
     $("feedback").className = "feedback good";
     $("feedback").textContent = `✅ Correct! +${points} points. ${question.explanation}`;
+    announceStatus(`Correct. ${points} points earned. ${question.explanation}`);
   } else {
     lives--;
     levelStreak = 0;
     player.streak = 0;
+    playAnswerSound(false);
+    triggerCardAnimation("incorrect");
     $("feedback").className = "feedback bad";
     $("feedback").textContent = `❌ Incorrect. ${question.explanation}`;
+    announceStatus(`Incorrect. ${question.explanation}`);
   }
 
   $("score").textContent = score;
-  $("lives").textContent = "❤️".repeat(lives) + "🖤".repeat(3 - lives);
-  $("lives").setAttribute("aria-label", `${lives} ${lives === 1 ? "life" : "lives"} remaining`);
+  updateLivesDisplay();
   $("gameStreak").textContent = levelStreak;
   $("feedback").classList.remove("hidden");
   $("nextButton").disabled = false;
@@ -705,11 +906,13 @@ function handleTimeout() {
     if (index === question.answer) button.classList.add("correct");
   });
 
-  $("lives").textContent = "❤️".repeat(lives) + "🖤".repeat(3 - lives);
-  $("lives").setAttribute("aria-label", `${lives} ${lives === 1 ? "life" : "lives"} remaining`);
+  playAnswerSound(false);
+  triggerCardAnimation("incorrect");
+  updateLivesDisplay();
   $("gameStreak").textContent = levelStreak;
   $("feedback").className = "feedback bad";
   $("feedback").textContent = `⏰ Time is up! ${question.explanation}`;
+  announceStatus(`Time is up. ${question.explanation}`);
   $("nextButton").disabled = false;
   $("hintButton").disabled = true;
   $("feedback").classList.remove("hidden");
@@ -733,24 +936,45 @@ function nextQuestion() {
 function finishLevel() {
   clearInterval(timerId);
   const passed = lives > 0 && correctAnswers >= Math.ceil(currentQuestions.length * 0.6);
+  const accuracy = currentQuestions.length ? Math.round((correctAnswers / currentQuestions.length) * 100) : 0;
 
   if (passed) {
     player.completedLevels.add(currentLevel.id);
     player.unlockedLevel = Math.max(player.unlockedLevel, Math.min(currentLevel.id + 1, levels.length));
   }
+  player.bestScore = Math.max(player.bestScore, score);
+  player.bestStreak = Math.max(player.bestStreak, levelStreak, player.streak);
+  player.bestLevelScores[currentLevel.id] = Math.max(player.bestLevelScores[currentLevel.id] || 0, score);
   player.xp += earnedXP;
   savePlayerProgress();
+  const leaderboardEntries = getLeaderboardEntries();
+  leaderboardEntries.push({ score, level: currentLevel.id, date: new Date().toISOString() });
+  saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
   nextLevelId = passed && currentLevel.id < levels.length ? currentLevel.id + 1 : null;
 
   $("resultIcon").textContent = passed ? "🏆" : "💪";
   $("resultTitle").textContent = passed ? "Level Completed!" : "Keep Practicing!";
-  $("resultMessage").textContent = passed
+  const summaryMessage = passed
     ? "Great work! You passed this level. Your next level is unlocked if one remains."
     : "You haven't passed this level yet. Review the explanations and try again.";
+  $("resultMessage").textContent = summaryMessage;
+  announceStatus(`${passed ? "Level passed" : "Level not passed"}. ${summaryMessage}`);
   $("finalScore").textContent = score;
   $("finalCorrect").textContent = `${correctAnswers}/${currentQuestions.length}`;
+  $("finalAccuracy").textContent = `${accuracy}%`;
   $("finalXP").textContent = earnedXP;
+  $("finalLives").textContent = lives;
+  $("finalBestStreak").textContent = bestLevelStreak;
   $("continueButton").textContent = passed && currentLevel.id < levels.length ? "Continue to Next Level →" : "Back to Levels →";
+
+  const resultIcon = $("resultIcon");
+  resultIcon.classList.remove("result-pop");
+  void resultIcon.offsetWidth;
+  resultIcon.classList.add("result-pop");
+  playTone({ frequency: passed ? 740 : 220, duration: 0.18, volume: 0.04, type: passed ? "triangle" : "sawtooth", sweep: passed ? 120 : -80 });
+  if (passed) {
+    setTimeout(() => playTone({ frequency: 980, duration: 0.14, volume: 0.04, type: "triangle", sweep: 140 }), 90);
+  }
 
   renderLevels();
   showScreen("resultScreen");
@@ -792,6 +1016,9 @@ $("nextButton").addEventListener("click", nextQuestion);
 $("exitButton").addEventListener("click", returnToDashboard);
 $("retryButton").addEventListener("click", startLevel);
 $("continueButton").addEventListener("click", continueFromResult);
+$("leaderboardButton").addEventListener("click", toggleLeaderboard);
+$("resetProgressButton").addEventListener("click", resetPlayerProgress);
 
 loadPlayerProgress();
+renderLeaderboard();
 renderLevels();

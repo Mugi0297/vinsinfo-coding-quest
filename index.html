@@ -13,6 +13,8 @@
     <div class="header-stats" aria-label="Your stats">
       <span><span aria-hidden="true">⭐</span> XP <strong id="xp">0</strong></span>
       <span><span aria-hidden="true">🔥</span> Streak <strong id="streak">0</strong></span>
+      <span><span aria-hidden="true">🏆</span> Best <strong id="bestScore">0</strong></span>
+      <span><span aria-hidden="true">📈</span> Best Streak <strong id="bestStreak">0</strong></span>
     </div>
   </header>
 
@@ -29,6 +31,37 @@
           <div class="progress-track" role="progressbar" aria-label="Levels completed" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><div id="progressBar" class="progress-fill"></div></div>
         </div>
         <button id="continueLearningButton" class="btn primary continue-button"><span id="continueLearningLabel">Start your first level</span><span aria-hidden="true">→</span></button>
+      </section>
+      <section class="performance-panel" aria-label="Performance snapshot">
+        <div class="panel-heading">
+          <p class="eyebrow">PERFORMANCE SNAPSHOT</p>
+          <h2>Peak play</h2>
+        </div>
+        <div class="performance-grid">
+          <div class="performance-card">
+            <span class="performance-label">Best Score</span>
+            <strong id="panelBestScore">0</strong>
+          </div>
+          <div class="performance-card">
+            <span class="performance-label">Best Streak</span>
+            <strong id="panelBestStreak">0</strong>
+          </div>
+          <div class="performance-card">
+            <span class="performance-label">Top Level</span>
+            <strong id="panelTopLevel">—</strong>
+          </div>
+        </div>
+      </section>
+      <div class="actions-row">
+        <button id="leaderboardButton" class="btn secondary">View Leaderboard</button>
+        <button id="resetProgressButton" class="btn secondary danger-button">Reset Progress</button>
+      </div>
+      <section id="leaderboardPanel" class="leaderboard-panel hidden" aria-live="polite">
+        <div class="panel-heading">
+          <p class="eyebrow">TOP RUNS</p>
+          <h2>Leaderboard</h2>
+        </div>
+        <ol id="leaderboardList" class="leaderboard-list"></ol>
       </section>
       <div class="section-heading">
         <div>
@@ -54,10 +87,10 @@
       <div class="progress-track question-progress" role="progressbar" aria-label="Question progress" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1"><div id="questionProgress" class="progress-fill"></div></div>
       <div class="game-stats" aria-label="Current level stats">
         <span><span aria-hidden="true">⭐</span> Score <strong id="score">0</strong></span>
-        <span><span aria-hidden="true">❤️</span> Lives <strong id="lives" aria-label="3 lives remaining">❤️❤️❤️</strong></span>
+        <span><span aria-hidden="true">❤️</span> Lives <strong id="lives" aria-label="5 lives remaining">❤️❤️❤️❤️❤️</strong></span>
         <span><span aria-hidden="true">🔥</span> Streak <strong id="gameStreak">0</strong></span>
       </div>
-      <article class="question-card">
+      <article class="question-card" aria-live="polite" aria-atomic="true">
         <p id="questionCategory" class="eyebrow">PROGRAMMING BASICS</p>
         <div id="questionText" class="question-text">Question appears here</div>
         <div id="options" class="options" role="group" aria-label="Answer options"></div>
@@ -66,11 +99,12 @@
           <button id="nextButton" class="btn primary" disabled>Next Question →</button>
         </div>
         <p id="hintText" class="hint-text hidden"></p>
-        <div id="feedback" class="feedback hidden" aria-live="polite" aria-atomic="true"></div>
+        <div id="feedback" class="feedback hidden" role="status" aria-live="polite" aria-atomic="true"></div>
       </article>
+      <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     </section>
 
-    <section id="resultScreen" class="result-screen hidden">
+    <section id="resultScreen" class="result-screen hidden" aria-live="polite" aria-atomic="true">
       <div class="result-icon" id="resultIcon" aria-hidden="true">🏆</div>
       <p class="eyebrow">LEVEL REPORT</p>
       <h1 id="resultTitle">Level Completed!</h1>
@@ -78,7 +112,10 @@
       <div class="result-stats">
         <div><span>Score</span><strong id="finalScore">0</strong></div>
         <div><span>Correct</span><strong id="finalCorrect">0/3</strong></div>
+        <div><span>Accuracy</span><strong id="finalAccuracy">0%</strong></div>
         <div><span>XP Earned</span><strong id="finalXP">0</strong></div>
+        <div><span>Lives Left</span><strong id="finalLives">0</strong></div>
+        <div><span>Best Streak</span><strong id="finalBestStreak">0</strong></div>
       </div>
       <div class="result-actions">
         <button id="retryButton" class="btn secondary">↻ Retry Level</button>
