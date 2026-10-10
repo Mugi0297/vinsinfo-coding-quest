@@ -196,6 +196,12 @@ p { line-height: 1.65; }
   margin: 0;
   list-style: none;
 }
+.leaderboard-status {
+  min-height: 1.5em;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .leaderboard-item, .leaderboard-empty {
   display: grid;
   grid-template-columns: auto 1fr auto;

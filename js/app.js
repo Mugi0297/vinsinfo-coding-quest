@@ -179,18 +179,11 @@ function saveLeaderboardEntries(entries) {
   }
 }
 
-function getDisplayName(name) {
-  const safeName = typeof name === "string" ? name.trim() : "";
-  return safeName || "Player";
-}
-
-function renderLeaderboard() {
+function renderLeaderboardEntries(entries) {
   const list = $("leaderboardList");
   if (!list) return;
 
-  const entries = [...getLeaderboardEntries()].sort((a, b) => b.score - a.score).slice(0, 5);
   list.replaceChildren();
-
   if (!entries.length) {
     const emptyItem = document.createElement("li");
     emptyItem.className = "leaderboard-empty";
@@ -199,7 +192,7 @@ function renderLeaderboard() {
     return;
   }
 
-  entries.forEach((entry, index) => {
+  entries.slice(0, 10).forEach((entry, index) => {
     const item = document.createElement("li");
     item.className = "leaderboard-item";
 
@@ -211,13 +204,63 @@ function renderLeaderboard() {
     summary.className = "leaderboard-summary";
     summary.textContent = `${getDisplayName(entry.name)} · ${entry.score} pts · Level ${entry.level || 1}`;
 
+    const date = entry.created_at || entry.date;
     const when = document.createElement("span");
     when.className = "leaderboard-time";
-    when.textContent = entry.date ? new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent";
+    when.textContent = date ? new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent";
 
     item.append(rank, summary, when);
     list.appendChild(item);
   });
+}
+
+function getDisplayName(name) {
+  const safeName = typeof name === "string" ? name.trim() : "";
+  return safeName || "Player";
+}
+
+function renderLeaderboard() {
+  const entries = [...getLeaderboardEntries()].sort((a, b) => b.score - a.score).slice(0, 5);
+  renderLeaderboardEntries(entries);
+}
+
+async function loadGlobalLeaderboard() {
+  const status = $("leaderboardStatus");
+  status.textContent = "Loading shared scores…";
+  try {
+    const response = await fetch("/api/leaderboard");
+    if (!response.ok) throw new Error(`Leaderboard request failed (${response.status}).`);
+    const data = await response.json();
+    if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
+    renderLeaderboardEntries(data.entries);
+    status.textContent = "Scores shared across all players.";
+  } catch (error) {
+    console.error("Unable to load the global leaderboard.", error);
+    renderLeaderboard();
+    status.textContent = "Global leaderboard unavailable. Showing scores saved in this browser.";
+  }
+}
+
+async function submitGlobalLeaderboardRun(entry) {
+  const status = $("leaderboardStatus");
+  try {
+    const response = await fetch("/api/leaderboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry)
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Score submission failed (${response.status}).`);
+    }
+    const data = await response.json();
+    if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
+    renderLeaderboardEntries(data.entries);
+    status.textContent = "Your score was added to the global leaderboard.";
+  } catch (error) {
+    console.error("Unable to submit the score to the global leaderboard.", error);
+    status.textContent = "Your score could not be shared. It is saved only in this browser.";
+  }
 }
 
 function toggleLeaderboard() {
@@ -225,7 +268,7 @@ function toggleLeaderboard() {
   if (!panel) return;
   const isHidden = panel.classList.toggle("hidden");
   $("leaderboardButton").textContent = isHidden ? "View Leaderboard" : "Hide Leaderboard";
-  if (!isHidden) renderLeaderboard();
+  if (!isHidden) loadGlobalLeaderboard();
 }
 
 function syncPlayerNameFromInput() {
@@ -969,13 +1012,15 @@ function finishLevel() {
   player.xp += earnedXP;
   savePlayerProgress();
   const leaderboardEntries = getLeaderboardEntries();
-  leaderboardEntries.push({
+  const leaderboardEntry = {
     name: getDisplayName(player.name),
     score,
     level: currentLevel.id,
     date: new Date().toISOString()
-  });
+  };
+  leaderboardEntries.push(leaderboardEntry);
   saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
+  submitGlobalLeaderboardRun(leaderboardEntry);
   nextLevelId = passed && currentLevel.id < levels.length ? currentLevel.id + 1 : null;
 
   $("resultIcon").textContent = passed ? "🏆" : "💪";
@@ -1044,7 +1089,7 @@ $("retryButton").addEventListener("click", startLevel);
 $("continueButton").addEventListener("click", continueFromResult);
 $("leaderboardButton").addEventListener("click", toggleLeaderboard);
 $("resetProgressButton").addEventListener("click", resetPlayerProgress);
-$("playerNameInput").addEventListener("input", event => {
+$("playerNameInput").addEventListener("change", event => {
   player.name = getDisplayName(event.target.value);
   event.target.value = player.name;
   savePlayerProgress();
