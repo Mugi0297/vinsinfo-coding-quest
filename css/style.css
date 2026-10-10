@@ -140,7 +140,9 @@ p { line-height: 1.65; }
   line-height: 1.8;
 }
 .player-meta-row {
-  display: flex;
+  display: grid;
+  justify-items: end;
+  gap: 7px;
   justify-content: flex-end;
   margin: 0 0 18px;
 }
@@ -165,6 +167,14 @@ p { line-height: 1.65; }
   background: rgba(11, 16, 32, 0.8);
   color: var(--text);
   font: inherit;
+}
+.privacy-note {
+  max-width: 420px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
 }
 .actions-row {
   display: flex;
@@ -453,6 +463,10 @@ footer p { margin: 0; }
     gap: 8px;
   }
   .header-stats > span { justify-content: center; width: 100%; }
+  .player-meta-row { justify-items: stretch; }
+  .player-name-field { justify-content: space-between; }
+  .player-name-field input { min-width: 0; width: min(55%, 180px); }
+  .privacy-note { text-align: left; }
   main { width: 92%; margin-top: 20px; }
   .welcome { margin-bottom: 35px; padding: 24px 20px; border-radius: 19px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
