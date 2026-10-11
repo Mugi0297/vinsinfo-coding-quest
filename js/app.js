@@ -1,4 +1,23 @@
-const levels = Object.values(window.QUEST_LEVELS || {}).sort((a, b) => a.id - b.id);
+const LEVEL_SEQUENCE = [10, 5, 1, 2, 3, 4, 6, 7, 8, 9];
+
+function getLevelSequencePosition(levelId) {
+  const index = LEVEL_SEQUENCE.indexOf(levelId);
+  return index === -1 ? LEVEL_SEQUENCE.length + Number(levelId) : index;
+}
+
+function getLevelDisplaySlot(levelId) {
+  return getLevelSequencePosition(levelId) + 1;
+}
+
+function getLevelDisplayNumber(levelId) {
+  return getLevelDisplaySlot(levelId);
+}
+
+function isLevelUnlocked(levelId) {
+  return getLevelDisplaySlot(levelId) <= player.unlockedLevel;
+}
+
+const levels = Object.values(window.QUEST_LEVELS || {}).sort((a, b) => getLevelSequencePosition(a.id) - getLevelSequencePosition(b.id));
 const PLAYER_STORAGE_KEY = "vinsinfo-coding-quest-player-v1";
 const LEADERBOARD_STORAGE_KEY = "vinsinfo-coding-quest-leaderboard-v1";
 const QUESTIONS_PER_GAME = 30;
@@ -118,7 +137,9 @@ function loadPlayerProgress() {
   const completedLevelIds = Array.isArray(savedProgress.completedLevels)
     ? savedProgress.completedLevels.filter(id => Number.isInteger(id) && levels.some(level => level.id === id))
     : [];
-  const highestCompletedLevel = completedLevelIds.length ? Math.max(...completedLevelIds) : 0;
+  const highestCompletedSlot = completedLevelIds.length
+    ? Math.max(...completedLevelIds.map(getLevelDisplaySlot))
+    : 0;
   const savedUnlockedLevel = Number.isInteger(savedProgress.unlockedLevel)
     ? Math.max(1, Math.min(savedProgress.unlockedLevel, levels.length))
     : 1;
@@ -129,7 +150,7 @@ function loadPlayerProgress() {
   player.streak = Number.isInteger(savedProgress.streak) && savedProgress.streak >= 0 ? savedProgress.streak : 0;
   player.bestScore = Number.isFinite(savedProgress.bestScore) && savedProgress.bestScore >= 0 ? savedProgress.bestScore : 0;
   player.bestStreak = Number.isInteger(savedProgress.bestStreak) && savedProgress.bestStreak >= 0 ? savedProgress.bestStreak : 0;
-  player.unlockedLevel = Math.max(savedUnlockedLevel, Math.min(highestCompletedLevel + 1, levels.length));
+  player.unlockedLevel = Math.max(savedUnlockedLevel, Math.min(highestCompletedSlot + 1, levels.length));
   player.completedLevels = new Set(completedLevelIds);
 
   const rawBestLevelScores = savedProgress.bestLevelScores && typeof savedProgress.bestLevelScores === "object"
@@ -298,7 +319,7 @@ function getTopLevelSummary() {
   if (!entries.length) return { label: "—", score: 0 };
   const [levelId, score] = entries.reduce((best, current) => current[1] > best[1] ? current : best, entries[0]);
   return {
-    label: `Level ${levelId}`,
+    label: `Level ${getLevelDisplayNumber(levelId)}`,
     score: Number(score)
   };
 }
@@ -339,12 +360,12 @@ function renderStats() {
   const recommendedLevel = getRecommendedLevel();
   if (recommendedLevel) {
     const isReplay = player.completedLevels.has(recommendedLevel.id);
-    $("continueLearningLabel").textContent = `${isReplay ? "Replay" : completed ? "Continue to" : "Start"} Level ${recommendedLevel.id}`;
+    $("continueLearningLabel").textContent = `${isReplay ? "Replay" : completed ? "Continue to" : "Start"} Level ${getLevelDisplayNumber(recommendedLevel.id)}`;
   }
 }
 
 function getRecommendedLevel() {
-  return levels.find(level => level.id <= player.unlockedLevel && !player.completedLevels.has(level.id))
+  return levels.find(level => isLevelUnlocked(level.id) && !player.completedLevels.has(level.id))
     || levels[levels.length - 1];
 }
 
@@ -353,11 +374,12 @@ function renderLevels() {
   grid.replaceChildren();
 
   levels.forEach(level => {
-    const unlocked = level.id <= player.unlockedLevel;
+    const unlocked = isLevelUnlocked(level.id);
     const completed = player.completedLevels.has(level.id);
+    const displayNumber = getLevelDisplayNumber(level.id);
     const card = document.createElement("article");
     card.className = `level-card${unlocked ? "" : " locked"}${completed ? " completed" : ""}`;
-    card.setAttribute("aria-label", `Level ${level.id}: ${level.title}, ${completed ? "completed" : unlocked ? "unlocked" : "locked"}`);
+    card.setAttribute("aria-label", `Level ${displayNumber}: ${level.title}, ${completed ? "completed" : unlocked ? "unlocked" : "locked"}`);
 
     const cardTop = document.createElement("div");
     cardTop.className = "level-card-top";
@@ -372,7 +394,7 @@ function renderLevels() {
     cardTop.append(icon, status);
 
     const title = document.createElement("h3");
-    title.textContent = `Level ${level.id}: ${level.title}`;
+    title.textContent = `Level ${displayNumber}: ${level.title}`;
 
     const description = document.createElement("p");
     description.textContent = level.description;
@@ -380,7 +402,7 @@ function renderLevels() {
     const meta = document.createElement("div");
     meta.className = "level-meta";
     const levelNumber = document.createElement("span");
-    levelNumber.textContent = `Level ${String(level.id).padStart(2, "0")}`;
+    levelNumber.textContent = `Level ${String(displayNumber).padStart(2, "0")}`;
     const questionCount = document.createElement("span");
     questionCount.textContent = `${level.questions.length}-question bank`;
     const bestScore = player.bestLevelScores[level.id] ?? 0;
@@ -403,14 +425,14 @@ function renderLevels() {
 
 function showLevel(levelId) {
   currentLevel = levels.find(level => level.id === levelId);
-  if (!currentLevel || levelId > player.unlockedLevel) return;
+  if (!currentLevel || !isLevelUnlocked(levelId)) return;
 
   $("levelGrid").classList.add("hidden");
   $("levelDetails").classList.remove("hidden");
   $("detailsContent").replaceChildren();
 
   const title = document.createElement("h2");
-  title.textContent = `${currentLevel.icon} Level ${currentLevel.id}: ${currentLevel.title}`;
+  title.textContent = `${currentLevel.icon} Level ${getLevelDisplayNumber(currentLevel.id)}: ${currentLevel.title}`;
   const description = document.createElement("p");
   description.textContent = currentLevel.description;
   const topicTitle = document.createElement("h3");
@@ -869,7 +891,7 @@ function renderQuestion() {
   $("questionProgress").style.width = `${questionProgress}%`;
   $("questionProgress").parentElement.setAttribute("aria-valuemax", currentQuestions.length);
   $("questionProgress").parentElement.setAttribute("aria-valuenow", questionIndex + 1);
-  $("questionCategory").textContent = currentLevel.title.toUpperCase();
+  $("questionCategory").textContent = `LEVEL ${getLevelDisplayNumber(currentLevel.id)} · ${currentLevel.title.toUpperCase()}`;
   renderQuestionContent(question.question);
   $("options").replaceChildren();
   $("hintText").textContent = "";
@@ -1013,7 +1035,8 @@ function finishLevel() {
 
   if (passed) {
     player.completedLevels.add(currentLevel.id);
-    player.unlockedLevel = Math.max(player.unlockedLevel, Math.min(currentLevel.id + 1, levels.length));
+    const currentLevelSlot = getLevelDisplaySlot(currentLevel.id);
+    player.unlockedLevel = Math.max(player.unlockedLevel, Math.min(currentLevelSlot + 1, levels.length));
   }
   player.bestScore = Math.max(player.bestScore, score);
   player.bestStreak = Math.max(player.bestStreak, levelStreak, player.streak);
@@ -1030,7 +1053,8 @@ function finishLevel() {
   leaderboardEntries.push(leaderboardEntry);
   saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
   submitGlobalLeaderboardRun(leaderboardEntry);
-  nextLevelId = passed && currentLevel.id < levels.length ? currentLevel.id + 1 : null;
+  const currentLevelSlotIndex = getLevelSequencePosition(currentLevel.id);
+  nextLevelId = passed && currentLevelSlotIndex < LEVEL_SEQUENCE.length - 1 ? LEVEL_SEQUENCE[currentLevelSlotIndex + 1] : null;
 
   $("resultIcon").textContent = passed ? "🏆" : "💪";
   $("resultTitle").textContent = passed ? "Level Completed!" : "Keep Practicing!";
@@ -1045,7 +1069,7 @@ function finishLevel() {
   $("finalXP").textContent = earnedXP;
   $("finalLives").textContent = lives;
   $("finalBestStreak").textContent = bestLevelStreak;
-  $("continueButton").textContent = passed && currentLevel.id < levels.length ? "Continue to Next Level →" : "Back to Levels →";
+  $("continueButton").textContent = passed && currentLevelSlotIndex < LEVEL_SEQUENCE.length - 1 ? "Continue to Next Level →" : "Back to Levels →";
 
   const resultIcon = $("resultIcon");
   resultIcon.classList.remove("result-pop");
