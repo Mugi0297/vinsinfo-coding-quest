@@ -65,11 +65,25 @@
         </ol>
       </section>
       <div class="player-meta-row">
-        <label class="player-name-field" for="playerNameInput">
-          <span>Player Name</span>
-          <input id="playerNameInput" type="text" maxlength="20" value="Player" aria-describedby="leaderboardPrivacyNote" />
-        </label>
-        <p id="leaderboardPrivacyNote" class="privacy-note">Your nickname and score are public on the shared leaderboard. Use a nickname; don’t enter personal information.</p>
+        <div class="student-details-grid">
+          <label class="player-name-field" for="playerNameInput">
+            <span>Student Name</span>
+            <input id="playerNameInput" type="text" maxlength="80" autocomplete="name" placeholder="Enter your name" required aria-describedby="leaderboardPrivacyNote" />
+          </label>
+          <label class="player-name-field" for="playerRollNoInput">
+            <span>Roll No.</span>
+            <input id="playerRollNoInput" type="text" maxlength="30" autocomplete="off" placeholder="e.g. 24CS001" required aria-describedby="leaderboardPrivacyNote" />
+          </label>
+          <label class="player-name-field" for="playerDepartmentInput">
+            <span>Department</span>
+            <input id="playerDepartmentInput" type="text" maxlength="80" autocomplete="organization-title" placeholder="e.g. B.Sc-CS" required aria-describedby="leaderboardPrivacyNote" />
+          </label>
+          <label class="player-name-field" for="playerSectionInput">
+            <span>Section</span>
+            <input id="playerSectionInput" type="text" maxlength="30" autocomplete="off" placeholder="e.g. A, B, or C" required aria-describedby="leaderboardPrivacyNote" />
+          </label>
+        </div>
+        <p id="leaderboardPrivacyNote" class="privacy-note">Your name, roll number, department, section, and score will be public on the shared leaderboard.</p>
       </div>
       <div class="actions-row">
         <button id="leaderboardButton" class="btn secondary">View Leaderboard</button>

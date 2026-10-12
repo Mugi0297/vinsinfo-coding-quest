@@ -23,7 +23,10 @@ const LEADERBOARD_STORAGE_KEY = "vinsinfo-coding-quest-leaderboard-v1";
 const QUESTIONS_PER_GAME = 30;
 
 const player = {
-  name: "Player",
+  name: "",
+  rollno: "",
+  department: "",
+  section: "",
   xp: 0,
   streak: 0,
   bestScore: 0,
@@ -145,7 +148,10 @@ function loadPlayerProgress() {
     : 1;
 
   const savedName = typeof savedProgress.name === "string" ? savedProgress.name.trim() : "";
-  player.name = savedName || "Player";
+  player.name = savedName;
+  player.rollno = typeof savedProgress.rollno === "string" ? savedProgress.rollno.trim() : "";
+  player.department = typeof savedProgress.department === "string" ? savedProgress.department.trim() : "";
+  player.section = typeof savedProgress.section === "string" ? savedProgress.section.trim() : "";
   player.xp = Number.isFinite(savedProgress.xp) && savedProgress.xp >= 0 ? savedProgress.xp : 0;
   player.streak = Number.isInteger(savedProgress.streak) && savedProgress.streak >= 0 ? savedProgress.streak : 0;
   player.bestScore = Number.isFinite(savedProgress.bestScore) && savedProgress.bestScore >= 0 ? savedProgress.bestScore : 0;
@@ -169,6 +175,9 @@ function savePlayerProgress() {
   try {
     localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
       name: player.name,
+      rollno: player.rollno,
+      department: player.department,
+      section: player.section,
       xp: player.xp,
       streak: player.streak,
       bestScore: player.bestScore,
@@ -223,7 +232,15 @@ function renderLeaderboardEntries(entries) {
 
     const summary = document.createElement("span");
     summary.className = "leaderboard-summary";
-    summary.textContent = `${getDisplayName(entry.name)} · ${entry.score} pts · Level ${entry.level || 1}`;
+    const details = [
+      getDisplayName(entry.name),
+      entry.rollno ? `Roll No: ${entry.rollno}` : "",
+      entry.department || "",
+      entry.section ? `Section ${entry.section}` : "",
+      `${entry.score} pts`,
+      `Level ${entry.level || 1}`
+    ].filter(Boolean);
+    summary.textContent = details.join(" · ");
 
     const date = entry.created_at || entry.date;
     const when = document.createElement("span");
@@ -301,12 +318,22 @@ function toggleLeaderboard() {
   if (!isHidden) loadGlobalLeaderboard();
 }
 
-function syncPlayerNameFromInput() {
-  const input = $("playerNameInput");
-  if (!input) return;
-  player.name = getDisplayName(input.value);
-  input.value = player.name;
+function syncStudentDetails(requireComplete = false) {
+  const fields = [
+    ["name", "playerNameInput", "Enter your student name."],
+    ["rollno", "playerRollNoInput", "Enter your roll number."],
+    ["department", "playerDepartmentInput", "Enter your department."],
+    ["section", "playerSectionInput", "Enter your section."]
+  ];
+  for (const [key, id, validationMessage] of fields) {
+    const input = $(id);
+    const value = input.value.trim();
+    input.setCustomValidity(requireComplete && !value ? validationMessage : "");
+    player[key] = value;
+    if (requireComplete && !input.reportValidity()) return false;
+  }
   savePlayerProgress();
+  return true;
 }
 
 function showScreen(screenId) {
@@ -476,6 +503,7 @@ function updateLivesDisplay() {
 
 function startLevel() {
   if (!currentLevel) return;
+  if (!syncStudentDetails(true)) return;
   clearInterval(timerId);
   currentQuestions = shuffle(currentLevel.questions).slice(0, QUESTIONS_PER_GAME);
   questionIndex = 0;
@@ -1046,6 +1074,9 @@ function finishLevel() {
   const leaderboardEntries = getLeaderboardEntries();
   const leaderboardEntry = {
     name: getDisplayName(player.name),
+    rollno: player.rollno,
+    department: player.department,
+    section: player.section,
     score,
     level: currentLevel.id,
     date: new Date().toISOString()
@@ -1123,16 +1154,18 @@ $("continueButton").addEventListener("click", continueFromResult);
 $("leaderboardButton").addEventListener("click", toggleLeaderboard);
 $("leaderboardLevelFilter").addEventListener("change", loadGlobalLeaderboard);
 $("resetProgressButton").addEventListener("click", resetPlayerProgress);
-$("playerNameInput").addEventListener("change", event => {
-  player.name = getDisplayName(event.target.value);
-  event.target.value = player.name;
-  savePlayerProgress();
-});
 
 loadPlayerProgress();
-const playerNameInput = $("playerNameInput");
-if (playerNameInput) {
-  playerNameInput.value = player.name;
-}
+[
+  ["playerNameInput", player.name],
+  ["playerRollNoInput", player.rollno],
+  ["playerDepartmentInput", player.department],
+  ["playerSectionInput", player.section]
+].forEach(([id, value]) => {
+  const input = $(id);
+  input.value = value;
+  input.addEventListener("input", () => syncStudentDetails());
+  input.addEventListener("change", () => syncStudentDetails());
+});
 renderLeaderboard();
 renderLevels();

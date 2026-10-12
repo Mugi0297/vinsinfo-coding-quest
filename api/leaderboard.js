@@ -37,7 +37,7 @@ async function requestSupabase(url, serviceKey, options = {}) {
 
 async function getTopEntries(restUrl, serviceKey, level) {
   const params = {
-    select: "name,score,level,created_at",
+    select: "name,rollno,department,section,score,level,created_at",
     order: "score.desc,created_at.asc",
     limit: String(LEADERBOARD_SIZE)
   };
@@ -104,10 +104,22 @@ function parseRun(body) {
     throw new Error("Submit a valid leaderboard entry.");
   }
 
-  const name = Array.from(typeof entry.name === "string" ? entry.name.trim() : "")
-    .filter(character => !/[\u0000-\u001f\u007f]/.test(character))
-    .slice(0, 20)
-    .join("") || "Player";
+  const parseStudentField = (value, fieldName, maximumLength) => {
+    if (typeof value !== "string") {
+      throw new Error(`${fieldName} must be a non-empty string.`);
+    }
+    const normalized = Array.from(value.trim())
+      .filter(character => !/[\u0000-\u001f\u007f]/.test(character))
+      .join("");
+    if (!normalized || Array.from(normalized).length > maximumLength) {
+      throw new Error(`${fieldName} must contain 1 to ${maximumLength} characters.`);
+    }
+    return normalized;
+  };
+  const name = parseStudentField(entry.name, "Student name", 80);
+  const rollno = parseStudentField(entry.rollno, "Roll number", 30);
+  const department = parseStudentField(entry.department, "Department", 80);
+  const section = parseStudentField(entry.section, "Section", 30);
   const score = entry.score;
   const level = entry.level;
 
@@ -118,7 +130,7 @@ function parseRun(body) {
     throw new Error(`Level must be an integer from 1 to ${MAX_LEVEL}.`);
   }
 
-  return { name, score, level };
+  return { name, rollno, department, section, score, level };
 }
 
 module.exports = async function handler(req, res) {
@@ -165,7 +177,7 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 503, { error: "Score submission is temporarily unavailable." });
     }
 
-    const response = await requestSupabase(`${config.restUrl}?select=name,score,level,created_at`, config.serviceKey, {
+    const response = await requestSupabase(`${config.restUrl}?select=name,rollno,department,section,score,level,created_at`, config.serviceKey, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

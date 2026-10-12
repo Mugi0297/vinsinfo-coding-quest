@@ -68,7 +68,7 @@ window.QUEST_LEVELS[1] = {
 
 - XP, streak, unlocked levels, and completed levels are saved in this browser using local storage. Progress is specific to the browser and device.
 - The shared leaderboard requires the Supabase setup below. Player progress remains local to each browser.
-- Leaderboard nicknames and scores are public. Players should use nicknames and not enter personal information.
+- Student names, roll numbers, departments, sections, and scores are public on the shared leaderboard. Students must enter these details before starting a run.
 - Leaderboard submissions are limited to 10 per IP address per 10-minute window and checked for valid score and level ranges. Runs are still submitted by the browser without accounts or server-side gameplay verification, so the public leaderboard is not cheat-proof.
 - The question bank contains 350 practice questions across 10 levels. Each level randomly presents 30 questions per game from its 35-question bank. These are placement-round practice questions, not a verified or official list of VINSINFO questions.
 
@@ -77,7 +77,7 @@ window.QUEST_LEVELS[1] = {
 The Vercel function at `api/leaderboard.js` reads and writes leaderboard rows through Supabase. The Supabase service-role key is only used on the server and must never be added to browser JavaScript or committed to the repository.
 
 1. Create a Supabase project.
-2. In the Supabase SQL Editor, run [`supabase/leaderboard.sql`](./supabase/leaderboard.sql). If you already created the leaderboard table using an earlier version of this file, run the full updated SQL again; its `if not exists` and `create or replace` statements add the rate-limit table and function without deleting existing scores.
+2. In the Supabase SQL Editor, run [`supabase/leaderboard.sql`](./supabase/leaderboard.sql). If the leaderboard table already exists, run the updated SQL again to add the student-detail columns without deleting existing scores. Existing rows will have blank student details.
 3. In the Vercel project settings, add these environment variables for the deployment environments you use:
    - `SUPABASE_URL`: the project URL from Supabase API settings.
    - `SUPABASE_SERVICE_ROLE_KEY`: the service-role key from Supabase API keys.
