@@ -117,7 +117,7 @@ function parseRun(body) {
     return normalized;
   };
   const name = parseStudentField(entry.name, "Student name", 80);
-  const rollno = parseStudentField(entry.rollno, "Roll number", 30);
+  const rollno = parseStudentField(entry.rollno, "Roll number", 30).toUpperCase();
   const department = parseStudentField(entry.department, "Department", 80);
   const section = parseStudentField(entry.section, "Section", 30);
   const score = entry.score;

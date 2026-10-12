@@ -1,4 +1,4 @@
-const LEVEL_SEQUENCE = [10, 5, 1, 2, 3, 4, 6, 7, 8, 9];
+const LEVEL_SEQUENCE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 function getLevelSequencePosition(levelId) {
   const index = LEVEL_SEQUENCE.indexOf(levelId);
@@ -27,6 +27,7 @@ const player = {
   rollno: "",
   department: "",
   section: "",
+  progressRollno: "",
   xp: 0,
   streak: 0,
   bestScore: 0,
@@ -53,6 +54,10 @@ let answered = false;
 let hintUsed = false;
 let earnedXP = 0;
 let nextLevelId = null;
+let activeAttemptId = null;
+let startInProgress = false;
+let activeProgressSave = null;
+let continuingFromResult = false;
 
 const $ = id => document.getElementById(id);
 
@@ -140,24 +145,25 @@ function loadPlayerProgress() {
   const completedLevelIds = Array.isArray(savedProgress.completedLevels)
     ? savedProgress.completedLevels.filter(id => Number.isInteger(id) && levels.some(level => level.id === id))
     : [];
-  const highestCompletedSlot = completedLevelIds.length
-    ? Math.max(...completedLevelIds.map(getLevelDisplaySlot))
-    : 0;
-  const savedUnlockedLevel = Number.isInteger(savedProgress.unlockedLevel)
-    ? Math.max(1, Math.min(savedProgress.unlockedLevel, levels.length))
-    : 1;
-
   const savedName = typeof savedProgress.name === "string" ? savedProgress.name.trim() : "";
   player.name = savedName;
   player.rollno = typeof savedProgress.rollno === "string" ? savedProgress.rollno.trim() : "";
   player.department = typeof savedProgress.department === "string" ? savedProgress.department.trim() : "";
   player.section = typeof savedProgress.section === "string" ? savedProgress.section.trim() : "";
+  player.progressRollno = typeof savedProgress.progressRollno === "string"
+    ? savedProgress.progressRollno
+    : player.rollno;
   player.xp = Number.isFinite(savedProgress.xp) && savedProgress.xp >= 0 ? savedProgress.xp : 0;
   player.streak = Number.isInteger(savedProgress.streak) && savedProgress.streak >= 0 ? savedProgress.streak : 0;
   player.bestScore = Number.isFinite(savedProgress.bestScore) && savedProgress.bestScore >= 0 ? savedProgress.bestScore : 0;
   player.bestStreak = Number.isInteger(savedProgress.bestStreak) && savedProgress.bestStreak >= 0 ? savedProgress.bestStreak : 0;
-  player.unlockedLevel = Math.max(savedUnlockedLevel, Math.min(highestCompletedSlot + 1, levels.length));
   player.completedLevels = new Set(completedLevelIds);
+  let sequentiallyCompleted = 0;
+  while (sequentiallyCompleted < LEVEL_SEQUENCE.length
+    && player.completedLevels.has(LEVEL_SEQUENCE[sequentiallyCompleted])) {
+    sequentiallyCompleted++;
+  }
+  player.unlockedLevel = Math.min(sequentiallyCompleted + 1, levels.length);
 
   const rawBestLevelScores = savedProgress.bestLevelScores && typeof savedProgress.bestLevelScores === "object"
     ? savedProgress.bestLevelScores
@@ -178,6 +184,7 @@ function savePlayerProgress() {
       rollno: player.rollno,
       department: player.department,
       section: player.section,
+      progressRollno: player.progressRollno,
       xp: player.xp,
       streak: player.streak,
       bestScore: player.bestScore,
@@ -327,10 +334,23 @@ function syncStudentDetails(requireComplete = false) {
   ];
   for (const [key, id, validationMessage] of fields) {
     const input = $(id);
-    const value = input.value.trim();
+    const value = key === "rollno" ? input.value.trim().toUpperCase() : input.value.trim();
+    input.value = value;
     input.setCustomValidity(requireComplete && !value ? validationMessage : "");
     player[key] = value;
     if (requireComplete && !input.reportValidity()) return false;
+  }
+
+  function resetStudentGameProgress() {
+    player.xp = 0;
+    player.streak = 0;
+    player.bestScore = 0;
+    player.bestStreak = 0;
+    player.unlockedLevel = 1;
+    player.completedLevels = new Set();
+    player.bestLevelScores = {};
+    renderLevels();
+    renderStats();
   }
   savePlayerProgress();
   return true;
@@ -501,9 +521,48 @@ function updateLivesDisplay() {
   $("lives").setAttribute("aria-label", `${safeLives} ${safeLives === 1 ? "life" : "lives"} remaining`);
 }
 
-function startLevel() {
+async function startLevel() {
   if (!currentLevel) return;
-  if (!syncStudentDetails(true)) return;
+  if (startInProgress || !syncStudentDetails(true)) return;
+  startInProgress = true;
+  const startButton = $("startButton");
+  const retryButton = $("retryButton");
+  const button = $("levelDetails").classList.contains("hidden") ? retryButton : startButton;
+  button.disabled = true;
+  $("studentProfileStatus").textContent = "Saving student details and starting your run…";
+  if (player.progressRollno && player.progressRollno !== player.rollno) {
+    resetStudentGameProgress();
+  }
+  player.progressRollno = player.rollno;
+  savePlayerProgress();
+  try {
+    const response = await fetch("/api/student-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "start",
+        student: {
+          name: player.name,
+          rollno: player.rollno,
+          department: player.department,
+          section: player.section
+        },
+        level: currentLevel.id,
+        questionCount: Math.min(QUESTIONS_PER_GAME, currentLevel.questions.length)
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Run could not be registered (${response.status}).`);
+    if (!data.attemptId) throw new Error("The progress service returned an invalid response.");
+    activeAttemptId = data.attemptId;
+  } catch (error) {
+    console.error("Unable to register student run.", error);
+    $("studentProfileStatus").textContent = `Could not start or track this run: ${error.message}`;
+    button.disabled = false;
+    startInProgress = false;
+    return;
+  }
+  $("studentProfileStatus").textContent = "";
   clearInterval(timerId);
   currentQuestions = shuffle(currentLevel.questions).slice(0, QUESTIONS_PER_GAME);
   questionIndex = 0;
@@ -519,6 +578,8 @@ function startLevel() {
   $("levelDetails").classList.add("hidden");
   showScreen("gameScreen");
   renderQuestion();
+  button.disabled = false;
+  startInProgress = false;
 }
 
 function findMatchingCodeDelimiter(source, openingIndex, openingCharacter, closingCharacter) {
@@ -1058,8 +1119,11 @@ function nextQuestion() {
 
 function finishLevel() {
   clearInterval(timerId);
+  const completedLevelId = currentLevel.id;
   const passed = lives > 0 && correctAnswers >= Math.ceil(currentQuestions.length * 0.6);
   const accuracy = currentQuestions.length ? Math.round((correctAnswers / currentQuestions.length) * 100) : 0;
+  const wasLevelCompleted = player.completedLevels.has(currentLevel.id);
+  const unlockedBeforeRun = player.unlockedLevel;
 
   if (passed) {
     player.completedLevels.add(currentLevel.id);
@@ -1084,6 +1148,25 @@ function finishLevel() {
   leaderboardEntries.push(leaderboardEntry);
   saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
   submitGlobalLeaderboardRun(leaderboardEntry);
+  const completedAttemptId = activeAttemptId;
+  const progressSubmission = (async () => {
+    if (!completedAttemptId) throw new Error("No active run was registered for progress tracking.");
+    const response = await fetch("/api/student-progress", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        attemptId: completedAttemptId,
+        rollno: player.rollno,
+        score,
+        correctAnswers,
+        questionCount: currentQuestions.length
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Progress could not be saved (${response.status}).`);
+    if (activeAttemptId === completedAttemptId) activeAttemptId = null;
+  })();
+  activeProgressSave = progressSubmission;
   const currentLevelSlotIndex = getLevelSequencePosition(currentLevel.id);
   nextLevelId = passed && currentLevelSlotIndex < LEVEL_SEQUENCE.length - 1 ? LEVEL_SEQUENCE[currentLevelSlotIndex + 1] : null;
 
@@ -1114,16 +1197,40 @@ function finishLevel() {
   renderLevels();
   showScreen("resultScreen");
   window.scrollTo({ top: 0, behavior: "smooth" });
+  progressSubmission.catch(error => {
+    console.error("Unable to save completed student run.", error);
+    if (passed && !wasLevelCompleted) {
+      player.completedLevels.delete(completedLevelId);
+      player.unlockedLevel = unlockedBeforeRun;
+      savePlayerProgress();
+      renderLevels();
+    }
+    $("resultMessage").textContent += ` Progress tracking could not be saved: ${error.message}`;
+  });
 }
 
-function continueFromResult() {
-  const targetId = nextLevelId;
+async function continueFromResult() {
+  if (continuingFromResult) return;
+  continuingFromResult = true;
+  let targetId = nextLevelId;
+  const continueButton = $("continueButton");
+  if (targetId && activeProgressSave) {
+    continueButton.disabled = true;
+    continueButton.textContent = "Saving progress…";
+    try {
+      await activeProgressSave;
+    } catch {
+      targetId = null;
+    }
+  }
   nextLevelId = null;
   clearInterval(timerId);
   showScreen("dashboard");
   backToLevels();
   renderLevels();
-  if (targetId) showLevel(targetId);
+  if (targetId && isLevelUnlocked(targetId)) showLevel(targetId);
+  continueButton.disabled = false;
+  continuingFromResult = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1131,6 +1238,14 @@ function returnToDashboard() {
   if ($("gameScreen").classList.contains("hidden") === false
     && !window.confirm("Exit this level? Your current run will not count toward completion.")) return;
   clearInterval(timerId);
+  if (activeAttemptId) {
+    fetch("/api/student-progress", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attemptId: activeAttemptId, rollno: player.rollno, abandoned: true })
+    }).catch(error => console.error("Unable to mark abandoned student run.", error));
+    activeAttemptId = null;
+  }
   showScreen("dashboard");
   backToLevels();
   renderLevels();

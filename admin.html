@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1020">
+  <title>Admin Dashboard | VINSINFO Coding Quest</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">⚡</span> VINSINFO <span class="brand-light">Admin</span></div>
+    <a class="btn secondary" href="index.html">Student game</a>
+  </header>
+  <main class="admin-main">
+    <section id="adminLoginView" class="admin-login admin-card">
+      <p class="eyebrow">RESTRICTED ACCESS</p>
+      <h1>Admin sign in</h1>
+      <p class="admin-muted">Sign in to view student profiles and progress records.</p>
+      <form id="adminLoginForm">
+        <label for="adminUsername">Username</label>
+        <input id="adminUsername" name="username" type="text" autocomplete="username" required>
+        <label for="adminPassword">Password</label>
+        <input id="adminPassword" name="password" type="password" autocomplete="current-password" required>
+        <p id="adminLoginStatus" class="admin-status" role="status" aria-live="polite"></p>
+        <button id="adminLoginButton" class="btn primary" type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="adminDashboardView" class="hidden" aria-labelledby="adminTitle">
+      <div class="admin-heading">
+        <div>
+          <p class="eyebrow">STUDENT PERFORMANCE</p>
+          <h1 id="adminTitle">Admin dashboard</h1>
+        </div>
+        <div class="admin-actions">
+          <button id="adminRefreshButton" class="btn secondary" type="button">Refresh</button>
+          <button id="adminLogoutButton" class="btn secondary" type="button">Sign out</button>
+        </div>
+      </div>
+      <p id="dashboardStatus" class="admin-status" role="status" aria-live="polite"></p>
+      <section class="admin-scorecards" aria-label="Student and score summary">
+        <article class="admin-card score-card"><span>Registered students</span><strong id="studentCount">0</strong></article>
+        <article class="admin-card score-card"><span>Completed runs</span><strong id="completedCount">0</strong></article>
+        <article class="admin-card score-card"><span>Passed runs</span><strong id="passedCount">0</strong></article>
+        <article class="admin-card score-card"><span>Average score</span><strong id="averageScore">0</strong></article>
+      </section>
+
+      <section class="admin-chart-grid" aria-label="Progress charts">
+        <article class="admin-card chart-card">
+          <h2>Average score · last 7 days</h2>
+          <canvas id="scoreTrendChart" aria-label="Average student score over the last seven days"></canvas>
+        </article>
+        <article class="admin-card chart-card">
+          <h2>Level passes</h2>
+          <canvas id="levelCompletionChart" aria-label="Number of passing attempts by level"></canvas>
+        </article>
+      </section>
+
+      <section class="admin-card admin-table-section">
+        <div class="admin-section-heading">
+          <div><p class="eyebrow">TOP SCORES</p><h2>Leaderboard</h2></div>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead><tr><th>Rank</th><th>Student</th><th>Roll No.</th><th>Department</th><th>Section</th><th>Best score</th><th>Level</th></tr></thead>
+            <tbody id="adminLeaderboardRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-card admin-table-section">
+        <div class="admin-section-heading">
+          <div><p class="eyebrow">INDIVIDUAL RECORDS</p><h2>Student progress</h2></div>
+          <label class="admin-search" for="studentSearch">Search students
+            <input id="studentSearch" type="search" placeholder="Name or roll number">
+          </label>
+        </div>
+        <div class="admin-table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Roll No.</th><th>Department</th><th>Section</th><th>Levels passed</th><th>Completed runs</th><th>Average score</th><th>Last activity</th></tr></thead>
+            <tbody id="studentProgressRows"></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="admin-disclaimer">Scores are reported by the student game client and are not independently verified.</p>
+    </section>
+  </main>
+  <footer><p>VINSINFO Coding Quest · <a href="index.html">Return to student game</a></p></footer>
+  <script src="js/admin.js"></script>
+</body>
+</html>
