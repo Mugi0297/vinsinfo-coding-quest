@@ -43,7 +43,7 @@ vinsinfo-coding-quest/
 1. Extract this folder.
 2. Open the folder in VS Code.
 3. Open `index.html` in a browser, or use the VS Code Live Server extension.
-4. Sign in with an account enrolled by the admin, accept the public leaderboard notice, and start at Level 1.
+4. New students select **Create an account** and enter their name, roll number, department, section, and password. Registration signs them in automatically. Returning students sign in with their roll number and password. Confirm the displayed details, accept the public leaderboard notice, then start at Level 1.
 
 Student login and server-verified progress require the deployed API and Supabase configuration below. Opening `index.html` directly from disk only displays the front end; it cannot authenticate or save shared progress.
 
