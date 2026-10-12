@@ -2,6 +2,12 @@ const $ = id => document.getElementById(id);
 
 let dashboardData = { students: [], attempts: [] };
 let refreshTimer = null;
+const LEVEL_SEQUENCE = [10, 5, 1, 2, 3, 4, 6, 7, 8, 9];
+
+function getDisplayLevel(levelId) {
+  const position = LEVEL_SEQUENCE.indexOf(Number(levelId));
+  return position < 0 ? `Level ${levelId}` : `Level ${position + 1}`;
+}
 
 async function requestJson(url, options) {
   const response = await fetch(url, { cache: "no-store", ...options });
@@ -202,7 +208,7 @@ function renderCharts() {
 
   const passedByLevel = Array.from({ length: 10 }, (_, index) => ({
     label: String(index + 1),
-    value: completedAttempts().filter(attempt => Number(attempt.level) === index + 1 && attempt.passed).length
+    value: completedAttempts().filter(attempt => Number(attempt.level) === LEVEL_SEQUENCE[index] && attempt.passed).length
   }));
   drawChart($("levelCompletionChart"), {
     points: passedByLevel,
@@ -228,7 +234,7 @@ function renderLeaderboard() {
     createCell(row, stats.student.department);
     createCell(row, stats.student.section);
     createCell(row, stats.bestAttempt.score);
-    createCell(row, `Level ${stats.bestAttempt.level}`);
+    createCell(row, getDisplayLevel(stats.bestAttempt.level));
     body.appendChild(row);
   });
 }
@@ -315,6 +321,28 @@ $("adminLogoutButton").addEventListener("click", async () => {
 
 $("adminRefreshButton").addEventListener("click", loadDashboard);
 $("studentSearch").addEventListener("input", renderStudentProgress);
+$("studentEnrollmentForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $("enrollStudentButton");
+  const values = Object.fromEntries(new FormData(form));
+  button.disabled = true;
+  $("enrollmentStatus").textContent = "Saving student account…";
+  try {
+    const data = await requestJson("/api/admin/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values)
+    });
+    form.reset();
+    $("enrollmentStatus").textContent = `${data.student.name} (${data.student.rollno}) is enrolled. Share the student password privately.`;
+    await loadDashboard();
+  } catch (error) {
+    $("enrollmentStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 window.addEventListener("resize", () => {
   if (!$("adminDashboardView").classList.contains("hidden") && dashboardData) renderCharts();
 });

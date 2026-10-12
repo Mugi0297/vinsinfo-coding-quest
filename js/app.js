@@ -1,4 +1,4 @@
-const LEVEL_SEQUENCE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const LEVEL_SEQUENCE = [10, 5, 1, 2, 3, 4, 6, 7, 8, 9];
 
 function getLevelSequencePosition(levelId) {
   const index = LEVEL_SEQUENCE.indexOf(levelId);
@@ -58,6 +58,9 @@ let activeAttemptId = null;
 let startInProgress = false;
 let activeProgressSave = null;
 let continuingFromResult = false;
+let studentAuthenticated = false;
+let finishingLevel = false;
+let completionFailed = false;
 
 const $ = id => document.getElementById(id);
 
@@ -112,6 +115,14 @@ function playAnswerSound(isCorrect) {
   if (isCorrect) {
     playTone({ frequency: 660, duration: 0.12, volume: 0.05, type: "triangle", sweep: 120 });
     setTimeout(() => playTone({ frequency: 880, duration: 0.14, volume: 0.05, type: "triangle", sweep: 150 }), 90);
+  } else if (result.timedOut) {
+    levelStreak = 0;
+    player.streak = 0;
+    playAnswerSound(false);
+    triggerCardAnimation("incorrect");
+    $("feedback").className = "feedback bad";
+    $("feedback").textContent = `⏰ Time expired. Your answer was recorded as a timeout. ${question.explanation}`;
+    announceStatus(`Time expired. ${question.explanation}`);
   } else {
     playTone({ frequency: 220, duration: 0.18, volume: 0.045, type: "sawtooth", sweep: -90 });
   }
@@ -239,22 +250,9 @@ function renderLeaderboardEntries(entries) {
 
     const summary = document.createElement("span");
     summary.className = "leaderboard-summary";
-    const details = [
-      getDisplayName(entry.name),
-      entry.rollno ? `Roll No: ${entry.rollno}` : "",
-      entry.department || "",
-      entry.section ? `Section ${entry.section}` : "",
-      `${entry.score} pts`,
-      `Level ${entry.level || 1}`
-    ].filter(Boolean);
-    summary.textContent = details.join(" · ");
+    summary.textContent = `${getDisplayName(entry.name)} · ${entry.score} pts · Level ${getLevelDisplayNumber(Number(entry.level) || 10)}`;
 
-    const date = entry.created_at || entry.date;
-    const when = document.createElement("span");
-    when.className = "leaderboard-time";
-    when.textContent = date ? new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent";
-
-    item.append(rank, summary, when);
+    item.append(rank, summary);
     list.appendChild(item);
   });
 }
@@ -286,34 +284,11 @@ async function loadGlobalLeaderboard() {
     renderLeaderboardEntries(data.entries);
     status.textContent = selectedLevel === "all"
       ? "Scores shared across all players and levels."
-      : `Scores shared across all players for Level ${selectedLevel}.`;
+      : `Scores shared across all players for Level ${getLevelDisplayNumber(Number(selectedLevel))}.`;
   } catch (error) {
     console.error("Unable to load the global leaderboard.", error);
     renderLeaderboard();
     status.textContent = "Global leaderboard unavailable. Showing scores saved in this browser.";
-  }
-}
-
-async function submitGlobalLeaderboardRun(entry) {
-  const status = $("leaderboardStatus");
-  try {
-    const response = await fetch("/api/leaderboard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(entry)
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || `Score submission failed (${response.status}).`);
-    }
-    const data = await response.json();
-    if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
-    $("leaderboardLevelFilter").value = String(entry.level);
-    renderLeaderboardEntries(data.entries);
-    status.textContent = `Your score was added to the Level ${entry.level} leaderboard.`;
-  } catch (error) {
-    console.error("Unable to submit the score to the global leaderboard.", error);
-    status.textContent = `${error.message} The run remains saved only in this browser.`;
   }
 }
 
@@ -341,19 +316,216 @@ function syncStudentDetails(requireComplete = false) {
     if (requireComplete && !input.reportValidity()) return false;
   }
 
-  function resetStudentGameProgress() {
-    player.xp = 0;
-    player.streak = 0;
-    player.bestScore = 0;
-    player.bestStreak = 0;
-    player.unlockedLevel = 1;
-    player.completedLevels = new Set();
-    player.bestLevelScores = {};
-    renderLevels();
-    renderStats();
-  }
   savePlayerProgress();
   return true;
+}
+
+function resetStudentGameProgress() {
+  player.xp = 0;
+  player.streak = 0;
+  player.bestScore = 0;
+  player.bestStreak = 0;
+  player.unlockedLevel = 1;
+  player.completedLevels = new Set();
+  player.bestLevelScores = {};
+  renderLevels();
+  renderStats();
+}
+
+async function loadStudentProgress() {
+  player.completedLevels = new Set();
+  player.bestLevelScores = {};
+  player.bestScore = 0;
+  player.unlockedLevel = 1;
+  const response = await fetch("/api/student-progress", { cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Student progress request failed (${response.status}).`);
+  if (!Array.isArray(data.completedLevels) || !data.bestScores || typeof data.bestScores !== "object") {
+    throw new Error("Student progress response has an invalid format.");
+  }
+  player.completedLevels = new Set(data.completedLevels.filter(level =>
+    Number.isInteger(level) && LEVEL_SEQUENCE.includes(level)
+  ));
+  player.bestLevelScores = Object.fromEntries(
+    Object.entries(data.bestScores).filter(([level, bestScore]) =>
+      LEVEL_SEQUENCE.includes(Number(level)) && Number.isFinite(bestScore) && bestScore >= 0
+    )
+  );
+  player.bestScore = Math.max(0, ...Object.values(player.bestLevelScores));
+  let passedLevels = 0;
+  while (passedLevels < LEVEL_SEQUENCE.length && player.completedLevels.has(LEVEL_SEQUENCE[passedLevels])) {
+    passedLevels++;
+  }
+  player.unlockedLevel = Math.min(passedLevels + 1, levels.length);
+  savePlayerProgress();
+  renderLevels();
+  renderStats();
+}
+
+async function applyStudentProfile(profile) {
+  const previousProgress = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(PLAYER_STORAGE_KEY) || "{}");
+    } catch (error) {
+      console.error("Unable to read saved Coding Quest progress.", error);
+      return {};
+    }
+  })();
+  player.name = profile.name;
+  player.rollno = profile.rollno;
+  player.department = profile.department;
+  player.section = profile.section;
+  $("playerNameInput").value = player.name;
+  $("playerRollNoInput").value = player.rollno;
+  $("playerDepartmentInput").value = player.department;
+  $("playerSectionInput").value = player.section;
+  $("studentSignedInName").textContent = `${player.name} · ${player.rollno}`;
+  $("studentLoginForm").classList.add("hidden");
+  $("studentSignupForm").classList.add("hidden");
+  $("studentSignedIn").classList.remove("hidden");
+  studentAuthenticated = true;
+  if (previousProgress.progressRollno === profile.rollno) {
+    loadPlayerProgress();
+    player.name = profile.name;
+    player.rollno = profile.rollno;
+    player.department = profile.department;
+    player.section = profile.section;
+    savePlayerProgress();
+  } else {
+    resetStudentGameProgress();
+    player.progressRollno = profile.rollno;
+    savePlayerProgress();
+  }
+  try {
+    await loadStudentProgress();
+    $("studentProfileStatus").textContent = "";
+  } catch (error) {
+    console.error("Unable to load server-verified student progress.", error);
+    $("studentProfileStatus").textContent = `Your level progress could not be loaded: ${error.message}`;
+  }
+}
+
+async function initializeStudentSession() {
+  try {
+    const response = await fetch("/api/student/auth", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Student session check failed (${response.status}).`);
+    if (data.authenticated && data.student) await applyStudentProfile(data.student);
+  } catch (error) {
+    console.error("Unable to check student session.", error);
+    $("studentProfileStatus").textContent = `Student sign-in unavailable: ${error.message}`;
+  }
+}
+
+async function signInStudent(event) {
+  event.preventDefault();
+  const button = $("studentLoginButton");
+  button.disabled = true;
+  $("studentProfileStatus").textContent = "Signing in…";
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        rollno: $("studentLoginRollno").value,
+        password: $("studentLoginPassword").value
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Student sign-in failed (${response.status}).`);
+    $("studentLoginPassword").value = "";
+    await applyStudentProfile(data.student);
+    if (!/could not be loaded/.test($("studentProfileStatus").textContent)) {
+      $("studentProfileStatus").textContent = `Signed in as ${player.name}.`;
+    }
+  } catch (error) {
+    console.error("Student sign-in failed.", error);
+    $("studentProfileStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function showStudentSignup() {
+  $("studentLoginForm").classList.add("hidden");
+  $("studentSignupForm").classList.remove("hidden");
+  $("studentProfileStatus").textContent = "";
+  $("studentSignupName").focus();
+}
+
+function showStudentLogin() {
+  $("studentSignupForm").classList.add("hidden");
+  $("studentLoginForm").classList.remove("hidden");
+  $("studentProfileStatus").textContent = "";
+  $("studentLoginRollno").focus();
+}
+
+async function signUpStudent(event) {
+  event.preventDefault();
+  const password = $("studentSignupPassword").value;
+  if (password !== $("studentSignupPasswordConfirm").value) {
+    $("studentSignupPasswordConfirm").setCustomValidity("Passwords do not match.");
+    $("studentSignupPasswordConfirm").reportValidity();
+    return;
+  }
+  $("studentSignupPasswordConfirm").setCustomValidity("");
+  const button = $("studentSignupButton");
+  button.disabled = true;
+  $("studentProfileStatus").textContent = "Creating your student account…";
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "signup",
+        name: $("studentSignupName").value,
+        rollno: $("studentSignupRollno").value,
+        department: $("studentSignupDepartment").value,
+        section: $("studentSignupSection").value,
+        password
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Account creation failed (${response.status}).`);
+    $("studentSignupForm").reset();
+    await applyStudentProfile(data.student);
+    if (!/could not be loaded/.test($("studentProfileStatus").textContent)) {
+      $("studentProfileStatus").textContent = `Account created. Signed in as ${player.name}.`;
+    }
+  } catch (error) {
+    console.error("Student sign-up failed.", error);
+    $("studentProfileStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function signOutStudent() {
+  try {
+    const response = await fetch("/api/student/auth", { method: "DELETE" });
+    if (!response.ok) throw new Error(`Sign out failed (${response.status}).`);
+    studentAuthenticated = false;
+    activeAttemptId = null;
+    resetStudentGameProgress();
+    player.name = "";
+    player.rollno = "";
+    player.department = "";
+    player.section = "";
+    player.progressRollno = "";
+    $("playerNameInput").value = "";
+    $("playerRollNoInput").value = "";
+    $("playerDepartmentInput").value = "";
+    $("playerSectionInput").value = "";
+    $("studentLoginRollno").value = "";
+    $("studentLoginForm").classList.remove("hidden");
+    $("studentSignupForm").classList.add("hidden");
+    $("studentSignedIn").classList.add("hidden");
+    savePlayerProgress();
+    $("studentProfileStatus").textContent = "Signed out.";
+  } catch (error) {
+    console.error("Student sign out failed.", error);
+    $("studentProfileStatus").textContent = error.message;
+  }
 }
 
 function showScreen(screenId) {
@@ -371,20 +543,46 @@ function getTopLevelSummary() {
   };
 }
 
-function resetPlayerProgress() {
-  if (!window.confirm("Reset your progress and best scores? This cannot be undone.")) return;
+async function resetPlayerProgress() {
+  if (!studentAuthenticated) {
+    $("studentProfileStatus").textContent = "Sign in before resetting your server-saved level progress.";
+    $("studentLoginRollno").focus();
+    return;
+  }
+  if (!window.confirm("Reset your level progress and start again at Level 1? This will not delete your attempt history or public leaderboard scores.")) return;
 
-  player.xp = 0;
-  player.streak = 0;
-  player.bestScore = 0;
-  player.bestStreak = 0;
-  player.unlockedLevel = 1;
-  player.completedLevels = new Set();
-  player.bestLevelScores = {};
-  savePlayerProgress();
-  renderLevels();
-  renderStats();
-  announceStatus("Progress reset successfully.");
+  const button = $("resetProgressButton");
+  button.disabled = true;
+  $("studentProfileStatus").textContent = "Resetting your saved progress…";
+  try {
+    const response = await fetch("/api/student-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reset" })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Progress reset failed (${response.status}).`);
+    if (data.reset !== true) throw new Error("The server did not confirm your progress reset.");
+
+    player.xp = 0;
+    player.streak = 0;
+    player.bestScore = 0;
+    player.bestStreak = 0;
+    player.unlockedLevel = 1;
+    player.completedLevels = new Set();
+    player.bestLevelScores = {};
+    player.progressRollno = player.rollno;
+    savePlayerProgress();
+    renderLevels();
+    renderStats();
+    $("studentProfileStatus").textContent = "Progress reset. You can start again at Level 1.";
+    announceStatus("Progress reset successfully.");
+  } catch (error) {
+    console.error("Unable to reset student progress.", error);
+    $("studentProfileStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderStats() {
@@ -523,6 +721,16 @@ function updateLivesDisplay() {
 
 async function startLevel() {
   if (!currentLevel) return;
+  if (!studentAuthenticated) {
+    $("studentProfileStatus").textContent = "Sign in with your admin-enrolled student account before starting a level.";
+    $("studentLoginRollno").focus();
+    return;
+  }
+  if (!$("leaderboardConsent").checked) {
+    $("studentProfileStatus").textContent = "Please confirm the public leaderboard privacy notice before starting.";
+    $("leaderboardConsent").focus();
+    return;
+  }
   if (startInProgress || !syncStudentDetails(true)) return;
   startInProgress = true;
   const startButton = $("startButton");
@@ -535,20 +743,17 @@ async function startLevel() {
   }
   player.progressRollno = player.rollno;
   savePlayerProgress();
+  const selectedQuestions = shuffle(currentLevel.questions.map((question, bankIndex) => ({ ...question, bankIndex })))
+    .slice(0, QUESTIONS_PER_GAME);
   try {
     const response = await fetch("/api/student-progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "start",
-        student: {
-          name: player.name,
-          rollno: player.rollno,
-          department: player.department,
-          section: player.section
-        },
         level: currentLevel.id,
-        questionCount: Math.min(QUESTIONS_PER_GAME, currentLevel.questions.length)
+        leaderboardConsent: $("leaderboardConsent").checked,
+        questionIndices: selectedQuestions.map(question => question.bankIndex)
       })
     });
     const data = await response.json();
@@ -564,7 +769,7 @@ async function startLevel() {
   }
   $("studentProfileStatus").textContent = "";
   clearInterval(timerId);
-  currentQuestions = shuffle(currentLevel.questions).slice(0, QUESTIONS_PER_GAME);
+  currentQuestions = selectedQuestions;
   questionIndex = 0;
   score = 0;
   lives = MAX_LIVES;
@@ -1028,26 +1233,62 @@ function updateTimerDisplay() {
   $("timer").classList.toggle("warning", timeLeft <= 5);
 }
 
-function chooseAnswer(selectedIndex) {
+async function chooseAnswer(selectedIndex) {
   if (answered) return;
   answered = true;
   clearInterval(timerId);
-
   const question = currentQuestions[questionIndex];
   const buttons = [...$("options").querySelectorAll("button")];
-  const isCorrect = selectedIndex === question.answer;
-
   buttons.forEach((button, index) => {
     button.disabled = true;
-    if (index === question.answer) button.classList.add("correct");
-    else if (index === selectedIndex) button.classList.add("incorrect");
+    if (index === selectedIndex) button.classList.add("selected");
   });
 
+  let result;
+  try {
+    const response = await fetch("/api/student-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "answer",
+        attemptId: activeAttemptId,
+        questionNumber: questionIndex,
+        selectedIndex
+      })
+    });
+    result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Answer could not be checked (${response.status}).`);
+  } catch (error) {
+    console.error("Unable to validate student answer.", error);
+    $("feedback").className = "feedback bad";
+    $("feedback").textContent = `${error.message} Your answer was not recorded. Retry this question.`;
+    $("feedback").classList.remove("hidden");
+    $("nextButton").disabled = true;
+    $("hintButton").disabled = false;
+    buttons.forEach(button => {
+      button.disabled = false;
+      button.classList.remove("selected");
+    });
+    answered = false;
+    timerId = setInterval(() => {
+      timeLeft--;
+      updateTimerDisplay();
+      if (timeLeft <= 0) {
+        clearInterval(timerId);
+        if (!answered) handleTimeout();
+      }
+    }, 1000);
+    return;
+  }
+
+  const isCorrect = result.correct;
+  score = result.score;
+  correctAnswers = result.correctAnswers;
+  lives = result.lives;
   if (isCorrect) {
-    const points = 10 + Math.floor(timeLeft / 5) * 2;
-    score += points;
+    buttons[selectedIndex].classList.add("correct");
+    const points = result.points;
     earnedXP += points;
-    correctAnswers++;
     levelStreak++;
     bestLevelStreak = Math.max(bestLevelStreak, levelStreak);
     player.streak++;
@@ -1058,7 +1299,7 @@ function chooseAnswer(selectedIndex) {
     $("feedback").textContent = `✅ Correct! +${points} points. ${question.explanation}`;
     announceStatus(`Correct. ${points} points earned. ${question.explanation}`);
   } else {
-    lives--;
+    buttons[selectedIndex].classList.add("incorrect");
     levelStreak = 0;
     player.streak = 0;
     playAnswerSound(false);
@@ -1077,18 +1318,47 @@ function chooseAnswer(selectedIndex) {
   renderStats();
 }
 
-function handleTimeout() {
+async function handleTimeout() {
   if (answered) return;
   answered = true;
-  lives--;
-  levelStreak = 0;
-  player.streak = 0;
+  clearInterval(timerId);
   const question = currentQuestions[questionIndex];
 
-  [...$("options").querySelectorAll("button")].forEach((button, index) => {
+  const buttons = [...$("options").querySelectorAll("button")];
+  buttons.forEach(button => {
     button.disabled = true;
-    if (index === question.answer) button.classList.add("correct");
   });
+  try {
+    const response = await fetch("/api/student-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "answer",
+        attemptId: activeAttemptId,
+        questionNumber: questionIndex,
+        selectedIndex: null
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Timeout could not be recorded (${response.status}).`);
+    score = result.score;
+    correctAnswers = result.correctAnswers;
+    lives = result.lives;
+  } catch (error) {
+    console.error("Unable to record student timeout.", error);
+    $("feedback").className = "feedback bad";
+    $("feedback").textContent = `${error.message} Retry recording this timeout.`;
+    $("feedback").classList.remove("hidden");
+    answered = false;
+    const retry = document.createElement("button");
+    retry.className = "btn secondary";
+    retry.textContent = "Record timeout";
+    retry.addEventListener("click", handleTimeout, { once: true });
+    $("feedback").appendChild(retry);
+    return;
+  }
+  levelStreak = 0;
+  player.streak = 0;
 
   playAnswerSound(false);
   triggerCardAnimation("incorrect");
@@ -1117,13 +1387,42 @@ function nextQuestion() {
   renderQuestion();
 }
 
-function finishLevel() {
+async function finishLevel() {
+  if (finishingLevel) return;
+  finishingLevel = true;
   clearInterval(timerId);
   const completedLevelId = currentLevel.id;
-  const passed = lives > 0 && correctAnswers >= Math.ceil(currentQuestions.length * 0.6);
-  const accuracy = currentQuestions.length ? Math.round((correctAnswers / currentQuestions.length) * 100) : 0;
-  const wasLevelCompleted = player.completedLevels.has(currentLevel.id);
-  const unlockedBeforeRun = player.unlockedLevel;
+  let result;
+  try {
+    const response = await fetch("/api/student-progress", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attemptId: activeAttemptId })
+    });
+    result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Progress could not be saved (${response.status}).`);
+  } catch (error) {
+    console.error("Unable to save completed student run.", error);
+    $("resultIcon").textContent = "⚠️";
+    $("resultTitle").textContent = "Unable to save results";
+    $("resultMessage").textContent = `${error.message} The save was not confirmed; retry to finish recording your result before leaving this level.`;
+    $("continueButton").textContent = "Retry saving results";
+    $("finalScore").textContent = score;
+    $("finalCorrect").textContent = `${correctAnswers}/${currentQuestions.length}`;
+    $("finalAccuracy").textContent = currentQuestions.length ? `${Math.round(correctAnswers / currentQuestions.length * 100)}%` : "0%";
+    showScreen("resultScreen");
+    completionFailed = true;
+    finishingLevel = false;
+    return;
+  }
+  activeAttemptId = null;
+  completionFailed = false;
+  score = result.score;
+  correctAnswers = result.correctAnswers;
+  lives = result.lives;
+  const passed = result.passed;
+  const accuracy = result.questionCount ? Math.round((correctAnswers / result.questionCount) * 100) : 0;
+  currentQuestions.length = result.questionCount;
 
   if (passed) {
     player.completedLevels.add(currentLevel.id);
@@ -1138,35 +1437,12 @@ function finishLevel() {
   const leaderboardEntries = getLeaderboardEntries();
   const leaderboardEntry = {
     name: getDisplayName(player.name),
-    rollno: player.rollno,
-    department: player.department,
-    section: player.section,
     score,
     level: currentLevel.id,
     date: new Date().toISOString()
   };
   leaderboardEntries.push(leaderboardEntry);
   saveLeaderboardEntries([...leaderboardEntries].sort((a, b) => b.score - a.score).slice(0, 10));
-  submitGlobalLeaderboardRun(leaderboardEntry);
-  const completedAttemptId = activeAttemptId;
-  const progressSubmission = (async () => {
-    if (!completedAttemptId) throw new Error("No active run was registered for progress tracking.");
-    const response = await fetch("/api/student-progress", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        attemptId: completedAttemptId,
-        rollno: player.rollno,
-        score,
-        correctAnswers,
-        questionCount: currentQuestions.length
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Progress could not be saved (${response.status}).`);
-    if (activeAttemptId === completedAttemptId) activeAttemptId = null;
-  })();
-  activeProgressSave = progressSubmission;
   const currentLevelSlotIndex = getLevelSequencePosition(currentLevel.id);
   nextLevelId = passed && currentLevelSlotIndex < LEVEL_SEQUENCE.length - 1 ? LEVEL_SEQUENCE[currentLevelSlotIndex + 1] : null;
 
@@ -1197,32 +1473,18 @@ function finishLevel() {
   renderLevels();
   showScreen("resultScreen");
   window.scrollTo({ top: 0, behavior: "smooth" });
-  progressSubmission.catch(error => {
-    console.error("Unable to save completed student run.", error);
-    if (passed && !wasLevelCompleted) {
-      player.completedLevels.delete(completedLevelId);
-      player.unlockedLevel = unlockedBeforeRun;
-      savePlayerProgress();
-      renderLevels();
-    }
-    $("resultMessage").textContent += ` Progress tracking could not be saved: ${error.message}`;
-  });
+  finishingLevel = false;
 }
 
 async function continueFromResult() {
   if (continuingFromResult) return;
+  if (completionFailed) {
+    await finishLevel();
+    return;
+  }
   continuingFromResult = true;
   let targetId = nextLevelId;
   const continueButton = $("continueButton");
-  if (targetId && activeProgressSave) {
-    continueButton.disabled = true;
-    continueButton.textContent = "Saving progress…";
-    try {
-      await activeProgressSave;
-    } catch {
-      targetId = null;
-    }
-  }
   nextLevelId = null;
   clearInterval(timerId);
   showScreen("dashboard");
@@ -1240,9 +1502,9 @@ function returnToDashboard() {
   clearInterval(timerId);
   if (activeAttemptId) {
     fetch("/api/student-progress", {
-      method: "PATCH",
+      method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ attemptId: activeAttemptId, rollno: player.rollno, abandoned: true })
+      body: JSON.stringify({ attemptId: activeAttemptId })
     }).catch(error => console.error("Unable to mark abandoned student run.", error));
     activeAttemptId = null;
   }
@@ -1269,18 +1531,12 @@ $("continueButton").addEventListener("click", continueFromResult);
 $("leaderboardButton").addEventListener("click", toggleLeaderboard);
 $("leaderboardLevelFilter").addEventListener("change", loadGlobalLeaderboard);
 $("resetProgressButton").addEventListener("click", resetPlayerProgress);
-
-loadPlayerProgress();
-[
-  ["playerNameInput", player.name],
-  ["playerRollNoInput", player.rollno],
-  ["playerDepartmentInput", player.department],
-  ["playerSectionInput", player.section]
-].forEach(([id, value]) => {
-  const input = $(id);
-  input.value = value;
-  input.addEventListener("input", () => syncStudentDetails());
-  input.addEventListener("change", () => syncStudentDetails());
-});
+$("studentLoginForm").addEventListener("submit", signInStudent);
+$("studentSignupForm").addEventListener("submit", signUpStudent);
+$("studentSignupPasswordConfirm").addEventListener("input", () => $("studentSignupPasswordConfirm").setCustomValidity(""));
+$("showSignupButton").addEventListener("click", showStudentSignup);
+$("showLoginButton").addEventListener("click", showStudentLogin);
+$("studentLogoutButton").addEventListener("click", signOutStudent);
 renderLeaderboard();
 renderLevels();
+initializeStudentSession();

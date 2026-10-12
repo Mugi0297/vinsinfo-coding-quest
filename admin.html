@@ -40,6 +40,21 @@
         </div>
       </div>
       <p id="dashboardStatus" class="admin-status" role="status" aria-live="polite"></p>
+      <section class="admin-card enrollment-section">
+        <div class="admin-section-heading">
+          <div><p class="eyebrow">STUDENT ACCOUNTS</p><h2>Enroll student</h2></div>
+        </div>
+        <p class="admin-muted">Create or reset a student account, then share the roll number and password with that student privately.</p>
+        <form id="studentEnrollmentForm" class="enrollment-form">
+          <label>Student name<input name="name" maxlength="80" required></label>
+          <label>Roll number<input name="rollno" maxlength="30" placeholder="e.g. 24CS001" required></label>
+          <label>Department<input name="department" maxlength="80" placeholder="e.g. B.Sc-CS" required></label>
+          <label>Section<input name="section" maxlength="30" placeholder="e.g. A" required></label>
+          <label>Student password<input name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required></label>
+          <button id="enrollStudentButton" class="btn primary" type="submit">Save student account</button>
+        </form>
+        <p id="enrollmentStatus" class="admin-status" role="status" aria-live="polite"></p>
+      </section>
       <section class="admin-scorecards" aria-label="Student and score summary">
         <article class="admin-card score-card"><span>Registered students</span><strong id="studentCount">0</strong></article>
         <article class="admin-card score-card"><span>Completed runs</span><strong id="completedCount">0</strong></article>
@@ -84,7 +99,7 @@
           </table>
         </div>
       </section>
-      <p class="admin-disclaimer">Scores are reported by the student game client and are not independently verified.</p>
+      <p class="admin-disclaimer">Student scores are validated against the private server-side answer key. Question order is chosen by the game client and is not randomised server-side.</p>
     </section>
   </main>
   <footer><p>VINSINFO Coding Quest · <a href="index.html">Return to student game</a></p></footer>

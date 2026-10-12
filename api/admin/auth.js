@@ -47,6 +47,7 @@ module.exports = async function handler(req, res) {
     }
 
     const token = sign({
+      role: "admin",
       username: config.username,
       exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000
     }, config.sessionSecret);

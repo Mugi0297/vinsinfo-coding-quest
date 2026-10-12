@@ -57,7 +57,10 @@ function verifyAdminSession(req) {
   if (actualSignature.length !== expectedSignature.length || !timingSafeEqual(actualSignature, expectedSignature)) return false;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    return payload.username === process.env.ADMIN_USERNAME && Number.isInteger(payload.exp) && payload.exp > Date.now();
+    return payload.role === "admin"
+      && payload.username === process.env.ADMIN_USERNAME
+      && Number.isInteger(payload.exp)
+      && payload.exp > Date.now();
   } catch {
     return false;
   }

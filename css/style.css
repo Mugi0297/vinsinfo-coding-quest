@@ -150,6 +150,36 @@ p { line-height: 1.65; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+.student-login-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.student-auth-heading { display: flex; grid-column: 1 / -1; justify-content: space-between; align-items: baseline; gap: 12px; color: var(--text); }
+.student-auth-heading > span { color: var(--muted); font-size: 12px; }
+.text-button { padding: 0; border: 0; background: none; color: var(--green); cursor: pointer; font: inherit; font-weight: 750; text-decoration: underline; }
+.text-button:hover { color: var(--text); }
+.student-login-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.student-login-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(11, 16, 32, 0.8);
+  color: var(--text);
+  font: inherit;
+}
+.student-login-form button { align-self: end; justify-self: start; }
+.student-login-form .auth-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+.student-signed-in { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.student-signed-in-name { margin: 0; font-weight: 750; }
 .player-name-field {
   display: grid;
   gap: 6px;
@@ -179,6 +209,8 @@ p { line-height: 1.65; }
   line-height: 1.5;
   text-align: left;
 }
+.leaderboard-consent { display: flex; align-items: flex-start; gap: 9px; color: var(--muted); font-size: 12px; }
+.leaderboard-consent input { flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--green); }
 .actions-row {
   display: flex;
   justify-content: flex-end;
@@ -469,6 +501,8 @@ footer p { margin: 0; }
   }
   .header-stats > span { justify-content: center; width: 100%; }
   .student-details-grid { grid-template-columns: 1fr; }
+  .student-login-form { grid-template-columns: 1fr; }
+  .student-login-form button { justify-self: stretch; }
   main { width: 92%; margin-top: 20px; }
   .welcome { margin-bottom: 35px; padding: 24px 20px; border-radius: 19px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 7px; }

@@ -65,25 +65,72 @@
         </ol>
       </section>
       <div class="player-meta-row">
+        <form id="studentLoginForm" class="student-login-form">
+          <div class="student-auth-heading">
+            <strong>Student sign in</strong>
+            <span>New here? <button id="showSignupButton" class="text-button" type="button">Create an account</button></span>
+          </div>
+          <label for="studentLoginRollno">Student roll number
+            <input id="studentLoginRollno" type="text" maxlength="30" autocomplete="username" placeholder="e.g. 24CS001" required>
+          </label>
+          <label for="studentLoginPassword">Student password
+            <input id="studentLoginPassword" type="password" autocomplete="current-password" required>
+          </label>
+          <button id="studentLoginButton" class="btn primary" type="submit">Student sign in</button>
+        </form>
+        <form id="studentSignupForm" class="student-login-form hidden">
+          <div class="student-auth-heading">
+            <strong>Create student account</strong>
+            <span>Already registered? <button id="showLoginButton" class="text-button" type="button">Sign in</button></span>
+          </div>
+          <label for="studentSignupName">Student name
+            <input id="studentSignupName" name="name" type="text" maxlength="80" autocomplete="name" placeholder="Enter your full name" required>
+          </label>
+          <label for="studentSignupRollno">Roll number
+            <input id="studentSignupRollno" name="rollno" type="text" maxlength="30" autocomplete="username" placeholder="e.g. 24CS001" required>
+          </label>
+          <label for="studentSignupDepartment">Department
+            <input id="studentSignupDepartment" name="department" type="text" maxlength="80" placeholder="e.g. B.Sc-CS" required>
+          </label>
+          <label for="studentSignupSection">Section
+            <input id="studentSignupSection" name="section" type="text" maxlength="30" placeholder="e.g. A, B, or C" required>
+          </label>
+          <label for="studentSignupPassword">Create password
+            <input id="studentSignupPassword" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" aria-describedby="signupPasswordHint" required>
+          </label>
+          <label for="studentSignupPasswordConfirm">Confirm password
+            <input id="studentSignupPasswordConfirm" type="password" minlength="12" maxlength="256" autocomplete="new-password" required>
+          </label>
+          <p id="signupPasswordHint" class="auth-hint">Use at least 12 characters. Your password is stored securely as a hash.</p>
+          <button id="studentSignupButton" class="btn primary" type="submit">Create account</button>
+        </form>
+        <div id="studentSignedIn" class="student-signed-in hidden">
+          <p id="studentSignedInName" class="student-signed-in-name"></p>
+          <button id="studentLogoutButton" class="btn secondary" type="button">Sign out</button>
+        </div>
         <div class="student-details-grid">
           <label class="player-name-field" for="playerNameInput">
             <span>Student Name</span>
-            <input id="playerNameInput" type="text" maxlength="80" autocomplete="name" placeholder="Enter your name" required aria-describedby="leaderboardPrivacyNote" />
+            <input id="playerNameInput" type="text" maxlength="80" autocomplete="name" readonly required aria-describedby="leaderboardPrivacyNote" />
           </label>
           <label class="player-name-field" for="playerRollNoInput">
             <span>Roll No.</span>
-            <input id="playerRollNoInput" type="text" maxlength="30" autocomplete="off" placeholder="e.g. 24CS001" required aria-describedby="leaderboardPrivacyNote" />
+            <input id="playerRollNoInput" type="text" maxlength="30" autocomplete="off" readonly required aria-describedby="leaderboardPrivacyNote" />
           </label>
           <label class="player-name-field" for="playerDepartmentInput">
             <span>Department</span>
-            <input id="playerDepartmentInput" type="text" maxlength="80" autocomplete="organization-title" placeholder="e.g. B.Sc-CS" required aria-describedby="leaderboardPrivacyNote" />
+            <input id="playerDepartmentInput" type="text" maxlength="80" autocomplete="organization-title" readonly required aria-describedby="leaderboardPrivacyNote" />
           </label>
           <label class="player-name-field" for="playerSectionInput">
             <span>Section</span>
-            <input id="playerSectionInput" type="text" maxlength="30" autocomplete="off" placeholder="e.g. A, B, or C" required aria-describedby="leaderboardPrivacyNote" />
+            <input id="playerSectionInput" type="text" maxlength="30" autocomplete="off" readonly required aria-describedby="leaderboardPrivacyNote" />
           </label>
         </div>
-        <p id="leaderboardPrivacyNote" class="privacy-note">Your name, roll number, department, section, and score will be public on the shared leaderboard.</p>
+        <p id="leaderboardPrivacyNote" class="privacy-note">Your name, score, and level will appear on the public leaderboard. Roll number, department, and section are used for private progress tracking and are visible only to the admin. Create an account with your details to get started. Roll numbers are not independently verified.</p>
+        <label class="leaderboard-consent" for="leaderboardConsent">
+          <input id="leaderboardConsent" type="checkbox" required>
+          <span>I understand my student name, score, and level will be visible on the public leaderboard.</span>
+        </label>
         <p id="studentProfileStatus" class="leaderboard-status" role="status" aria-live="polite"></p>
       </div>
       <div class="actions-row">
@@ -99,16 +146,16 @@
           <span>Show scores for</span>
           <select id="leaderboardLevelFilter">
             <option value="all">All levels</option>
-            <option value="1">Level 1</option>
-            <option value="2">Level 2</option>
-            <option value="3">Level 3</option>
-            <option value="4">Level 4</option>
-            <option value="5">Level 5</option>
-            <option value="6">Level 6</option>
-            <option value="7">Level 7</option>
-            <option value="8">Level 8</option>
-            <option value="9">Level 9</option>
-            <option value="10">Level 10</option>
+            <option value="10">Level 1 · Pseudocode Practice</option>
+            <option value="5">Level 2 · Flowchart Master</option>
+            <option value="1">Level 3 · Programming Basics</option>
+            <option value="2">Level 4 · Logic Master</option>
+            <option value="3">Level 5 · Array Hunter</option>
+            <option value="4">Level 6 · Output Detective</option>
+            <option value="6">Level 7 · Debugging Zone</option>
+            <option value="7">Level 8 · DSA Battle</option>
+            <option value="8">Level 9 · VINSINFO Mock Round</option>
+            <option value="9">Level 10 · Final Boss</option>
           </select>
         </label>
         <p id="leaderboardStatus" class="leaderboard-status" role="status" aria-live="polite"></p>
