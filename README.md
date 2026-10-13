@@ -70,7 +70,7 @@ window.QUEST_LEVELS[1] = {
 };
 ```
 
-The correct option text is stored separately in the server-only `api/_lib/answer-key.json`; do not put correct-answer markers in public level scripts. Keep each answer-key array aligned with its level's `questions` array whenever questions are added, removed, or reordered. Grading compares the selected option text rather than its position, so reordering answer choices does not change which answer is accepted. A game selects 30 questions from each level's 35-question bank.
+The correct option text is stored separately in the server-only `api/_lib/answer-key.json`; do not put correct-answer markers in public level scripts. Keep each answer-key array aligned with its level's `questions` array whenever questions are added, removed, or reordered. Grading compares the selected option text rather than its position, so reordering answer choices does not change which answer is accepted. A game uses a stable seeded selection from each level's 35-question bank so the same student sees a consistent question set for that level across attempts.
 
 ## Current limitations
 
@@ -81,7 +81,7 @@ The correct option text is stored separately in the server-only `api/_lib/answer
 - XP and streak are browser-only display stats. Verified attempts, scores, and passed levels are stored centrally and shown in the admin dashboard.
 - **Reset Progress** requires a signed-in student and resets server-verified level unlocks for a fresh Level 1 start. It preserves historical attempts in the admin dashboard and leaves public leaderboard scores unchanged.
 - The 60-second question deadline is enforced by server timestamps. Answers received after the deadline are recorded as timeouts and do not earn points.
-- The game has 350 practice questions across 10 levels, with 35 questions in each level. Each run presents 30 randomly selected questions. These are placement-round practice questions, not a verified or official list of VINSINFO questions.
+- The game has 350 practice questions across 10 levels, with 35 questions in each level. Each run presents 30 questions selected from the bank using a stable seed for that student and level, so repeated attempts remain fair and consistent. These are placement-round practice questions, not a verified or official list of VINSINFO questions.
 
 ## Configure the shared Vercel leaderboard
 

@@ -98,6 +98,10 @@ async function recordAnswer(body, student) {
   if (!Number.isInteger(body.questionNumber) || body.questionNumber < 0 || body.questionNumber >= QUESTIONS_PER_GAME) {
     throw createError("Question number is invalid.", 400);
   }
+  if (body.questionIndex !== undefined
+    && (!Number.isInteger(body.questionIndex) || body.questionIndex < 0)) {
+    throw createError("Question selection is invalid.", 400);
+  }
   if (body.selectedAnswer !== null
     && (typeof body.selectedAnswer !== "string" || !body.selectedAnswer.trim() || body.selectedAnswer.length > 500)) {
     throw createError("Selected answer is invalid.", 400);
@@ -130,6 +134,15 @@ async function recordAnswer(body, student) {
   const indices = attempt.question_indices;
   if (!Array.isArray(indices) || indices.length !== attempt.question_count
     || attempt.current_question >= indices.length) throw createError("This run has invalid question data.", 409);
+  if (body.questionIndex !== undefined && indices[attempt.current_question] !== body.questionIndex) {
+    console.error("Displayed question does not match the registered attempt.", {
+      attemptId,
+      questionNumber: body.questionNumber,
+      displayedQuestionIndex: body.questionIndex,
+      registeredQuestionIndex: indices[attempt.current_question]
+    });
+    throw createError("This question does not match the registered run. Please restart the level.", 409);
+  }
 
   const answer = ANSWERS[attempt.level]?.[indices[attempt.current_question]];
   if (typeof answer !== "string") throw createError("The answer key for this run is unavailable.", 500);

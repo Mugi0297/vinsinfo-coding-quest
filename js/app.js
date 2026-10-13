@@ -64,6 +64,22 @@ let completionFailed = false;
 
 const $ = id => document.getElementById(id);
 
+async function readJsonResponse(response, fallbackMessage = "Request failed.") {
+  const contentType = response.headers.get("content-type") || "";
+  const rawText = await response.clone().text();
+
+  if (!rawText) return null;
+  if (!contentType.includes("application/json")) {
+    return { error: rawText.trim() || fallbackMessage };
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    return { error: rawText.trim() || fallbackMessage };
+  }
+}
+
 function announceStatus(message) {
   const liveRegion = $("liveRegion");
   if (!liveRegion) return;
@@ -266,13 +282,17 @@ function renderLeaderboard() {
 async function loadGlobalLeaderboard() {
   const status = $("leaderboardStatus");
   const selectedLevel = $("leaderboardLevelFilter").value;
+  if (window.location.protocol === "file:") {
+    status.textContent = "Shared leaderboard requires a served app or deployed API.";
+    return;
+  }
   status.textContent = "Loading shared scores…";
   try {
     const query = new URLSearchParams({ level: selectedLevel });
     const response = await fetch(`/api/leaderboard?${query}`);
     if (!response.ok) throw new Error(`Leaderboard request failed (${response.status}).`);
-    const data = await response.json();
-    if (!Array.isArray(data.entries)) throw new Error("The leaderboard response has an invalid format.");
+    const data = await readJsonResponse(response, "The leaderboard response has an invalid format.");
+    if (!Array.isArray(data?.entries)) throw new Error("The leaderboard response has an invalid format.");
     renderLeaderboardEntries(data.entries);
     status.textContent = selectedLevel === "all"
       ? "Scores shared across all players and levels."
@@ -330,9 +350,9 @@ async function loadStudentProgress() {
   player.bestScore = 0;
   player.unlockedLevel = 1;
   const response = await fetch("/api/student-progress", { cache: "no-store" });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Student progress request failed (${response.status}).`);
-  if (!Array.isArray(data.completedLevels) || !data.bestScores || typeof data.bestScores !== "object") {
+  const data = await readJsonResponse(response, "Student progress request failed.");
+  if (!response.ok) throw new Error(data?.error || `Student progress request failed (${response.status}).`);
+  if (!Array.isArray(data?.completedLevels) || !data?.bestScores || typeof data.bestScores !== "object") {
     throw new Error("Student progress response has an invalid format.");
   }
   player.completedLevels = new Set(data.completedLevels.filter(level =>
@@ -398,11 +418,15 @@ async function applyStudentProfile(profile) {
 }
 
 async function initializeStudentSession() {
+  if (window.location.protocol === "file:") {
+    $("studentProfileStatus").textContent = "Student sign-in requires a served app or a deployed API.";
+    return;
+  }
   try {
     const response = await fetch("/api/student/auth", { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Student session check failed (${response.status}).`);
-    if (data.authenticated && data.student) await applyStudentProfile(data.student);
+    const data = await readJsonResponse(response, "Student session check failed.");
+    if (!response.ok) throw new Error(data?.error || `Student session check failed (${response.status}).`);
+    if (data?.authenticated && data.student) await applyStudentProfile(data.student);
   } catch (error) {
     console.error("Unable to check student session.", error);
     $("studentProfileStatus").textContent = `Student sign-in unavailable: ${error.message}`;
@@ -423,8 +447,8 @@ async function signInStudent(event) {
         password: $("studentLoginPassword").value
       })
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Student sign-in failed (${response.status}).`);
+    const data = await readJsonResponse(response, "Student sign-in failed.");
+    if (!response.ok) throw new Error(data?.error || `Student sign-in failed (${response.status}).`);
     $("studentLoginPassword").value = "";
     await applyStudentProfile(data.student);
     if (!/could not be loaded/.test($("studentProfileStatus").textContent)) {
@@ -477,8 +501,8 @@ async function signUpStudent(event) {
         password
       })
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Account creation failed (${response.status}).`);
+    const data = await readJsonResponse(response, "Account creation failed.");
+    if (!response.ok) throw new Error(data?.error || `Account creation failed (${response.status}).`);
     $("studentSignupForm").reset();
     await applyStudentProfile(data.student);
     if (!/could not be loaded/.test($("studentProfileStatus").textContent)) {
@@ -552,9 +576,9 @@ async function resetPlayerProgress() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "reset" })
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Progress reset failed (${response.status}).`);
-    if (data.reset !== true) throw new Error("The server did not confirm your progress reset.");
+    const data = await readJsonResponse(response, "Progress reset failed.");
+    if (!response.ok) throw new Error(data?.error || `Progress reset failed (${response.status}).`);
+    if (data?.reset !== true) throw new Error("The server did not confirm your progress reset.");
 
     player.xp = 0;
     player.streak = 0;
@@ -684,7 +708,7 @@ function showLevel(levelId) {
 
   const info = document.createElement("p");
   const gameQuestionCount = Math.min(QUESTIONS_PER_GAME, currentLevel.questions.length);
-  info.textContent = `${gameQuestionCount} questions per game, randomly selected from ${currentLevel.questions.length} | ${QUESTION_TIME_LIMIT} seconds per question | ${MAX_LIVES} lives`;
+  info.textContent = `${gameQuestionCount} questions per game, selected from ${currentLevel.questions.length} | ${QUESTION_TIME_LIMIT} seconds per question | ${MAX_LIVES} lives`;
   $("detailsContent").append(title, description, topicTitle, topicList, info);
   $("startButton").textContent = "Start Level 🚀";
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -696,10 +720,30 @@ function backToLevels() {
   currentLevel = null;
 }
 
-function shuffle(array) {
+function hashString(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRandom(seed) {
+  let state = hashString(seed);
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value = value + Math.imul(value ^ (value >>> 7), 61 | value) ^ value;
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffle(array, seed = "") {
   const copy = [...array];
+  const random = seed ? createSeededRandom(seed) : Math.random;
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -735,8 +779,13 @@ async function startLevel() {
   }
   player.progressRollno = player.rollno;
   savePlayerProgress();
-  const selectedQuestions = shuffle(currentLevel.questions.map((question, bankIndex) => ({ ...question, bankIndex })))
-    .slice(0, QUESTIONS_PER_GAME);
+  // Give each run a fresh order. A student/level-only seed repeated the same
+  // question selection on every retry and made attempt behavior confusing.
+  const questionSeed = `${player.rollno || "guest"}:${currentLevel.id}:${player.name || "student"}:${crypto.randomUUID()}`;
+  const selectedQuestions = shuffle(
+    currentLevel.questions.map((question, bankIndex) => ({ ...question, bankIndex })),
+    questionSeed
+  ).slice(0, QUESTIONS_PER_GAME);
   try {
     const response = await fetch("/api/student-progress", {
       method: "POST",
@@ -748,9 +797,9 @@ async function startLevel() {
         questionIndices: selectedQuestions.map(question => question.bankIndex)
       })
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `Run could not be registered (${response.status}).`);
-    if (!data.attemptId) throw new Error("The progress service returned an invalid response.");
+    const data = await readJsonResponse(response, "Run could not be registered.");
+    if (!response.ok) throw new Error(data?.error || `Run could not be registered (${response.status}).`);
+    if (!data?.attemptId) throw new Error("The progress service returned an invalid response.");
     activeAttemptId = data.attemptId;
   } catch (error) {
     console.error("Unable to register student run.", error);
@@ -1247,11 +1296,12 @@ async function chooseAnswer(selectedIndex) {
         action: "answer",
         attemptId: activeAttemptId,
         questionNumber: questionIndex,
+        questionIndex: question.bankIndex,
         selectedAnswer: question.options[selectedIndex]
       })
     });
-    result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Answer could not be checked (${response.status}).`);
+    result = await readJsonResponse(response, "Answer could not be checked.");
+    if (!response.ok) throw new Error(result?.error || `Answer could not be checked (${response.status}).`);
   } catch (error) {
     console.error("Unable to validate student answer.", error);
     $("feedback").className = "feedback bad";
@@ -1330,11 +1380,12 @@ async function handleTimeout() {
         action: "answer",
         attemptId: activeAttemptId,
         questionNumber: questionIndex,
+        questionIndex: question.bankIndex,
         selectedAnswer: null
       })
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Timeout could not be recorded (${response.status}).`);
+    const result = await readJsonResponse(response, "Timeout could not be recorded.");
+    if (!response.ok) throw new Error(result?.error || `Timeout could not be recorded (${response.status}).`);
     score = result.score;
     correctAnswers = result.correctAnswers;
     lives = result.lives;
@@ -1393,8 +1444,8 @@ async function finishLevel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ attemptId: activeAttemptId })
     });
-    result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Progress could not be saved (${response.status}).`);
+    result = await readJsonResponse(response, "Progress could not be saved.");
+    if (!response.ok) throw new Error(result?.error || `Progress could not be saved (${response.status}).`);
   } catch (error) {
     console.error("Unable to save completed student run.", error);
     $("resultIcon").textContent = "⚠️";
