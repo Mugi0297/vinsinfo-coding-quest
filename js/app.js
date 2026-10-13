@@ -115,14 +115,6 @@ function playAnswerSound(isCorrect) {
   if (isCorrect) {
     playTone({ frequency: 660, duration: 0.12, volume: 0.05, type: "triangle", sweep: 120 });
     setTimeout(() => playTone({ frequency: 880, duration: 0.14, volume: 0.05, type: "triangle", sweep: 150 }), 90);
-  } else if (result.timedOut) {
-    levelStreak = 0;
-    player.streak = 0;
-    playAnswerSound(false);
-    triggerCardAnimation("incorrect");
-    $("feedback").className = "feedback bad";
-    $("feedback").textContent = `⏰ Time expired. Your answer was recorded as a timeout. ${question.explanation}`;
-    announceStatus(`Time expired. ${question.explanation}`);
   } else {
     playTone({ frequency: 220, duration: 0.18, volume: 0.045, type: "sawtooth", sweep: -90 });
   }
@@ -840,7 +832,7 @@ function findCodeStatementEnd(source, startIndex) {
 
 function extractCodeSnippet(text) {
   if (/\bfor each\b/i.test(text)) return null;
-  const codeStartPattern = /\b(?:for|while|if|switch)\s*\(|\b(?:int|char|float|double|long|short|boolean|String|void)\s+[A-Za-z_]\w*\s*(?:=|;|\[\d+\])|\b(?:printf|System\.out\.(?:print|println)|print)\s*\(|\b(?:SET|FOR)\s+[A-Za-z_]\w*\s*=|\b(?:const|let|var)\s+[A-Za-z_]\w*\s*=/gi;
+  const codeStartPattern = /\b(?:for|while|if|switch)\s*\(|\b(?:int|char|float|double|long|short|boolean|String|void)\s+[A-Za-z_]\w*\s*(?:=|;|\[\d+\])|\b(?:printf|System\.out\.(?:print|println)|print)\s*\(|\b(?:FUNCTION|PROCEDURE)\s+[A-Za-z_]\w*\s*\(|\bSET\s+[A-Za-z_]\w*\s*=|\bFOR\s+[A-Za-z_]\w*\s*=\s*[^;:]*\bTO\b|\b(?:const|let|var)\s+[A-Za-z_]\w*\s*=/gi;
   const match = codeStartPattern.exec(text);
   if (!match) return null;
 
@@ -974,20 +966,22 @@ function extractCodeSnippet(text) {
 }
 
 function formatCodeSnippet(source) {
-  const isPseudocode = /\b(?:SET|FOR|WHILE|IF|END\s+(?:FOR|WHILE|IF))\b/.test(source);
+  const isPseudocode = /\b(?:SET|FOR|WHILE|IF|FUNCTION|PROCEDURE|END\s+(?:FOR|WHILE|IF|FUNCTION|PROCEDURE))\b/i.test(source);
   if (isPseudocode) {
     const lines = source
-      .replace(/:\s*(?=(?:SET|PRINT|IF|FOR|WHILE)\b)/gi, "\n")
+      .replace(/:\s*(?=(?:SET|PRINT|IF|FOR|WHILE|SWAP)\b)/gi, "\n")
+      .replace(/\bTHEN\s+(?=(?:SET|PRINT|IF|RETURN)\b)/gi, "THEN\n")
+      .replace(/\s+\bELSE\b\s+/gi, "\nELSE\n")
       .split(/[;\r\n]+/)
       .map(line => line.trim())
       .filter(Boolean);
     let indentation = 0;
     return lines.map(line => {
-      const closesBlock = /^END\s+(?:FOR|WHILE|IF)\b/i.test(line);
+      const closesBlock = /^END\s+(?:FOR|WHILE|IF|FUNCTION|PROCEDURE)\b/i.test(line);
       const startsElse = /^ELSE\b/i.test(line);
       if (closesBlock || startsElse) indentation = Math.max(0, indentation - 1);
       const formattedLine = `${"  ".repeat(indentation)}${line.replace(/;$/, "")}`;
-      if (/^(?:FOR\b|WHILE\b|IF\b.*THEN|ELSE\b)/i.test(line)) indentation++;
+      if (/^(?:FUNCTION\b|PROCEDURE\b|FOR\b|WHILE\b|IF\b.*THEN|ELSE\b)/i.test(line)) indentation++;
       return formattedLine;
     }).join("\n");
   }
@@ -1093,14 +1087,14 @@ function formatCodeSnippet(source) {
 }
 
 function detectCodeLanguage(prompt, code) {
-  if (/\bSET\b|\bEND\s+(?:FOR|IF|WHILE)\b/.test(code)) return "Pseudocode";
+  if (/\b(?:SET|FUNCTION|PROCEDURE)\b|\bFOR\s+[A-Za-z_]\w*\s*=[^;]*\bTO\b|\bIF\b.*\bTHEN\b|\bEND\s+(?:FOR|IF|WHILE|FUNCTION|PROCEDURE)\b/i.test(code)) return "Pseudocode";
   if (/\bSystem\.out\.|\bpublic\s+static\b/.test(code) || /\bJava\b/i.test(prompt)) return "Java";
   if (/\bprint\s*\(/.test(code) && !/\bprintf\s*\(/.test(code) || /\bPython\b/i.test(prompt)) return "Python";
   return "C";
 }
 
 function appendHighlightedCode(line, code) {
-  const tokenPattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:int|char|float|double|long|short|void|boolean|String|const|let|var|if|else|for|while|do|switch|case|default|break|continue|return|class|public|static|new|true|false|null|None|SET|FOR|WHILE|IF|THEN|ELSE|END|PRINT)\b|\b\d+(?:\.\d+)?\b|===?|!==?|<=?|>=?|&&|\|\||[+\-*\/%=!&|?:.,;()[\]{}])/g;
+  const tokenPattern = /(\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:int|char|float|double|long|short|void|boolean|String|const|let|var|if|else|for|while|do|switch|case|default|break|continue|return|class|public|static|new|true|false|null|None|SET|FOR|WHILE|IF|THEN|ELSE|END|FUNCTION|PROCEDURE|RETURN|PRINT|STEP|TO|MOD|FLOOR|SWAP)\b|\b\d+(?:\.\d+)?\b|===?|!==?|<=?|>=?|&&|\|\||[+\-*\/%=!&|?:.,;()[\]{}])/g;
   let previousIndex = 0;
   let match;
 

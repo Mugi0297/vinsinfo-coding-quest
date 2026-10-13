@@ -68,10 +68,10 @@ window.QUEST_LEVELS[6] = {
         explanation: "s is null, so calling length() on it throws a NullPointerException at runtime."
       },
       {
-        question: "A variable is used before it is given a value. What is the main risk?",
-        options: ["It holds an unpredictable garbage value", "It always holds zero", "It always produces a correct result", "It makes compilation fail"],
-        hint: "Local variables in C are not automatically set to zero.",
-        explanation: "Uninitialized local variables hold whatever was in memory, which is unpredictable."
+        question: "In C, what is the risk of reading an uninitialized automatic local variable?",
+        options: ["It has an indeterminate value that must not be relied on", "It always holds zero", "It always produces a correct result", "It makes compilation fail"],
+        hint: "Unlike static objects, automatic local variables are not initialized by default.",
+        explanation: "An uninitialized automatic object has an indeterminate value. Initialize it before reading it."
       },
       {
         question: "A C program is missing a closing brace }. What usually happens?",
