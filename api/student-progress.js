@@ -98,8 +98,8 @@ async function recordAnswer(body, student) {
   if (!Number.isInteger(body.questionNumber) || body.questionNumber < 0 || body.questionNumber >= QUESTIONS_PER_GAME) {
     throw createError("Question number is invalid.", 400);
   }
-  if (body.selectedIndex !== null
-    && (!Number.isInteger(body.selectedIndex) || body.selectedIndex < 0 || body.selectedIndex > 3)) {
+  if (body.selectedAnswer !== null
+    && (typeof body.selectedAnswer !== "string" || !body.selectedAnswer.trim() || body.selectedAnswer.length > 500)) {
     throw createError("Selected answer is invalid.", 400);
   }
 
@@ -124,18 +124,18 @@ async function recordAnswer(body, student) {
   if (!Array.isArray(answerHistory)) throw createError("This run has invalid answer history.", 409);
   if (attempt.current_question !== body.questionNumber) {
     const previousAnswer = answerHistory.find(answer => answer.questionNumber === body.questionNumber);
-    if (previousAnswer && previousAnswer.selectedIndex === body.selectedIndex) return previousAnswer.result;
+    if (previousAnswer && previousAnswer.selectedAnswer === body.selectedAnswer) return previousAnswer.result;
     throw createError("This question has already been answered or is out of order.", 409);
   }
   const indices = attempt.question_indices;
   if (!Array.isArray(indices) || indices.length !== attempt.question_count
     || attempt.current_question >= indices.length) throw createError("This run has invalid question data.", 409);
 
-  const answerIndex = ANSWERS[attempt.level]?.[indices[attempt.current_question]];
-  if (!Number.isInteger(answerIndex)) throw createError("The answer key for this run is unavailable.", 500);
+  const answer = ANSWERS[attempt.level]?.[indices[attempt.current_question]];
+  if (typeof answer !== "string") throw createError("The answer key for this run is unavailable.", 500);
   const elapsedMilliseconds = Math.max(0, Date.now() - new Date(attempt.question_started_at).getTime());
-  const timedOut = body.selectedIndex === null || elapsedMilliseconds >= QUESTION_TIME_LIMIT * 1000;
-  const isCorrect = !timedOut && body.selectedIndex === answerIndex;
+  const timedOut = body.selectedAnswer === null || elapsedMilliseconds >= QUESTION_TIME_LIMIT * 1000;
+  const isCorrect = !timedOut && body.selectedAnswer === answer;
   const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
   const points = isCorrect
     ? 10 + Math.floor(Math.max(0, QUESTION_TIME_LIMIT - Math.min(elapsedSeconds, QUESTION_TIME_LIMIT)) / 5) * 2
@@ -151,7 +151,7 @@ async function recordAnswer(body, student) {
     question_started_at: nextQuestionStartedAt,
     answer_history: [...answerHistory, {
       questionNumber: body.questionNumber,
-      selectedIndex: body.selectedIndex,
+      selectedAnswer: body.selectedAnswer,
       result: {
         correct: isCorrect,
         timedOut,

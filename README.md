@@ -70,7 +70,7 @@ window.QUEST_LEVELS[1] = {
 };
 ```
 
-The correct option's zero-based index (0–3) is stored separately in the server-only `api/_lib/answer-key.json`; do not put answer indices in public level scripts. Keep each answer-key array aligned with its level's `questions` array whenever questions are added, removed, or reordered. A game selects 30 questions from each level's 35-question bank.
+The correct option text is stored separately in the server-only `api/_lib/answer-key.json`; do not put correct-answer markers in public level scripts. Keep each answer-key array aligned with its level's `questions` array whenever questions are added, removed, or reordered. Grading compares the selected option text rather than its position, so reordering answer choices does not change which answer is accepted. A game selects 30 questions from each level's 35-question bank.
 
 ## Current limitations
 

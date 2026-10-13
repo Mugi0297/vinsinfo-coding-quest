@@ -32,7 +32,7 @@ test("all ten levels contain 35 questions and matching answer keys", () => {
   });
 });
 
-test("each question has four distinct options and a valid server answer", () => {
+test("each question has four distinct options and one matching server answer", () => {
   Object.entries(levels).forEach(([levelId, level]) => {
     level.questions.forEach((question, questionIndex) => {
       const label = `${level.title} question ${questionIndex + 1}`;
@@ -46,9 +46,9 @@ test("each question has four distinct options and a valid server answer", () => 
       assert.ok(question.options.every(option => typeof option === "string" && option.trim()), `${label} options`);
       assert.equal(new Set(question.options).size, question.options.length, `${label} duplicate options`);
 
-      const answerIndex = answerKeys[levelId][questionIndex];
-      assert.ok(Number.isInteger(answerIndex), `${label} answer index is an integer`);
-      assert.ok(answerIndex >= 0 && answerIndex < question.options.length, `${label} answer index is in range`);
+      const answer = answerKeys[levelId][questionIndex];
+      assert.equal(typeof answer, "string", `${label} answer is text`);
+      assert.equal(question.options.filter(option => option === answer).length, 1, `${label} answer matches exactly one option`);
     });
   });
 });

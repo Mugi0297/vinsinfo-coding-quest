@@ -352,7 +352,7 @@ test("server records correct answers submitted after 60 seconds as timeouts", as
     action: "answer",
     attemptId: "91",
     questionNumber: 0,
-    selectedIndex: answerKeys[10][0]
+    selectedAnswer: answerKeys[10][0]
   }), response);
 
   assert.equal(response.statusCode, 200);
@@ -431,7 +431,7 @@ test("server-verified completion records only public leaderboard fields", async 
     action: "answer",
     attemptId: "71",
     questionNumber: 0,
-    selectedIndex: answerKeys[10][0]
+    selectedAnswer: answerKeys[10][0]
   }), answerResponse);
   assert.equal(answerResponse.statusCode, 200);
   assert.equal(answerResponse.body.correct, true);
@@ -442,7 +442,7 @@ test("server-verified completion records only public leaderboard fields", async 
     action: "answer",
     attemptId: "71",
     questionNumber: 0,
-    selectedIndex: answerKeys[10][0]
+    selectedAnswer: answerKeys[10][0]
   }), retryResponse);
   assert.equal(retryResponse.statusCode, 200);
   assert.deepEqual(retryResponse.body, answerResponse.body);

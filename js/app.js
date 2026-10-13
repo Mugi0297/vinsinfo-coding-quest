@@ -1247,7 +1247,7 @@ async function chooseAnswer(selectedIndex) {
         action: "answer",
         attemptId: activeAttemptId,
         questionNumber: questionIndex,
-        selectedIndex
+        selectedAnswer: question.options[selectedIndex]
       })
     });
     result = await response.json();
@@ -1330,7 +1330,7 @@ async function handleTimeout() {
         action: "answer",
         attemptId: activeAttemptId,
         questionNumber: questionIndex,
-        selectedIndex: null
+        selectedAnswer: null
       })
     });
     const result = await response.json();
