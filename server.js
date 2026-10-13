@@ -115,7 +115,13 @@ function serveFile(filePath, res) {
       res.end('Unable to read file.');
       return;
     }
-    res.writeHead(200, { 'Content-Type': mimeType });
+    // Question data is paired with a server-side answer key by bank index.
+    // Revalidate every static response so a browser cannot keep old questions
+    // after a deployment updates the answer key (or vice versa).
+    res.writeHead(200, {
+      'Content-Type': mimeType,
+      'Cache-Control': 'no-cache, must-revalidate'
+    });
     res.end(fileBuffer);
   });
 }
